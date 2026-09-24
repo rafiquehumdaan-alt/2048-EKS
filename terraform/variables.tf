@@ -33,3 +33,51 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["eu-west-2a", "eu-west-2b"]
 }
+
+variable "eks_cluster_role_name" {
+  description = "Name of the EKS cluster IAM role"
+  type        = string
+  default     = "2048-eks-cluster-role"
+}
+
+variable "eks_node_role_name" {
+  description = "Name of the EKS managed node group IAM role"
+  type        = string
+  default     = "2048-eks-managed-node-group-role"
+}
+
+variable "eks_cluster_name" {
+  description = "Name of the EKS cluster"
+  type        = string
+  default     = "2048-eks-cluster"
+}
+
+variable "eks_node_instance_type" {
+  description = "Instance type for the EKS managed node group"
+  type        = string
+  default     = "c7i-flex.large"
+}
+
+variable "eks_node_min_size" {
+  description = "Minimum size of the EKS managed node group"
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_desired_size" {
+  description = "Desired size of the EKS managed node group"
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_max_size" {
+  description = "Maximum size of the EKS managed node group"
+  type        = number
+  default     = 4
+}
+
+variable "aws_admin_principal_arn" {
+  description = "AWS EKS access entry for the cluster"
+  type        = string
+  default     = "arn:aws:iam::435059220418:user/Humdaan"
+}

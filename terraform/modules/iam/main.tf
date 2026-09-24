@@ -1,5 +1,5 @@
 resource "aws_iam_role" "eks_cluster_role" {
-  name               = "2048-eks-cluster-role"
+  name               = var.eks_cluster_role_name
   assume_role_policy = data.aws_iam_policy_document.eks_cluster_role_assume_role_policy.json
 }
 
@@ -22,7 +22,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_role_policy_attachment" {
 }
 
 resource "aws_iam_role" "eks_managed_node_group_role" {
-  name               = "2048-eks-managed-node-group-role"
+  name               = var.eks_node_role_name
   assume_role_policy = data.aws_iam_policy_document.eks_managed_node_group_role_assume_role_policy.json
 }
 

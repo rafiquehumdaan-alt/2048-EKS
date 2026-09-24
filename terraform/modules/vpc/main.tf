@@ -16,7 +16,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "2048-public-${count.index + 1}"
+    Name                     = "2048-public-${count.index + 1}"
     "kubernetes.io/role/elb" = "1"
   }
 }
@@ -28,7 +28,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "2048-private-${count.index + 1}"
+    Name                              = "2048-private-${count.index + 1}"
     "kubernetes.io/role/internal-elb" = "1"
   }
 }
@@ -60,7 +60,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_eip" "nat" {
-  count = length(var.public_subnet_cidr_blocks)
+  count  = length(var.public_subnet_cidr_blocks)
   domain = "vpc"
 
   tags = {
