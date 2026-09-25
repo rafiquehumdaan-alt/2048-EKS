@@ -57,3 +57,31 @@ resource "aws_eks_access_policy_association" "admin_cluster_access" {
 
   depends_on = [aws_eks_access_entry.admin_access]
 }
+
+resource "aws_security_group" "cluster_sg" {
+  name   = "2048-eks-cluster-sg"
+  vpc_id = var.vpc_id
+}
+
+resource "aws_security_group" "node_sg" {
+  name   = "2048-eks-node-sg"
+  vpc_id = var.vpc_id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ingress_node_sg" {
+  security_group_id = aws_security_group.node_sg.id
+
+  from_port                    = 10250
+  to_port                      = 10250
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = aws_security_group.cluster_sg.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "ingress_cluster_sg" {
+  security_group_id = aws_security_group.cluster_sg.id
+
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
+  referenced_security_group_id = aws_security_group.node_sg.id
+}

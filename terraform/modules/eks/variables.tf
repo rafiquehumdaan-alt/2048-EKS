@@ -42,3 +42,8 @@ variable "admin_principal_arn" {
   description = "IAM principal ARN granted admin access to the EKS cluster"
   type        = string
 }
+
+variable "vpc_id" {
+  description = "VPC ID for the EKS security groups"
+  type        = string
+}

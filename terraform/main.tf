@@ -36,5 +36,7 @@ module "eks" {
 
   admin_principal_arn = var.aws_admin_principal_arn
 
+  vpc_id = module.vpc.vpc_id
+
   depends_on = [module.iam]
 }
