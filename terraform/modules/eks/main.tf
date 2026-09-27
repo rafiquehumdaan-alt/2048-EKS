@@ -100,6 +100,14 @@ resource "aws_vpc_security_group_ingress_rule" "node_to_node" {
   referenced_security_group_id = aws_security_group.node_sg.id
 }
 
+resource "aws_vpc_security_group_egress_rule" "node_to_node_egress" {
+  security_group_id = aws_security_group.node_sg.id
+
+  ip_protocol = "-1"
+
+  referenced_security_group_id = aws_security_group.node_sg.id
+}
+
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_https" {
   security_group_id = aws_security_group.node_sg.id
 
@@ -157,3 +165,4 @@ resource "aws_launch_template" "eks_nodes" {
     aws_security_group.node_sg.id
   ]
 }
+

@@ -50,3 +50,21 @@ module "vpc_endpoints" {
   private_route_table_ids = module.vpc.private_route_table_ids
   node_sg_id              = module.eks.node_sg_id
 }
+
+resource "aws_vpc_security_group_egress_rule" "node_to_vpc_endpoints" {
+  security_group_id            = module.eks.node_sg_id
+  referenced_security_group_id = module.vpc_endpoints.endpoint_sg_id
+
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+}
+
+resource "aws_vpc_security_group_egress_rule" "node_to_s3" {
+  security_group_id = module.eks.node_sg_id
+  prefix_list_id    = module.vpc_endpoints.s3_prefix_list_id
+
+  from_port   = 443
+  to_port     = 443
+  ip_protocol = "tcp"
+}
