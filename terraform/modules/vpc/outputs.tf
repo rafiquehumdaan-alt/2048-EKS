@@ -25,5 +25,5 @@ output "nat_gateway_ids" {
 
 output "private_route_table_ids" {
   description = "IDs of the Private Route Tables"
-  value       = aws_route_table.private[*].id 
+  value       = aws_route_table.private[*].id
 }

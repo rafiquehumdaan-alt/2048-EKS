@@ -40,3 +40,13 @@ module "eks" {
 
   depends_on = [module.iam]
 }
+
+module "vpc_endpoints" {
+  source = "./modules/vpc-endpoints"
+
+  vpc_id                  = module.vpc.vpc_id
+  aws_region              = var.aws_region
+  private_subnet_ids      = module.vpc.private_subnet_ids
+  private_route_table_ids = module.vpc.private_route_table_ids
+  node_sg_id              = module.eks.node_sg_id
+}
