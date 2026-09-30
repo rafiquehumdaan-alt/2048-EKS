@@ -68,3 +68,9 @@ resource "aws_vpc_security_group_egress_rule" "node_to_s3" {
   to_port     = 443
   ip_protocol = "tcp"
 }
+
+module "addons_iam" {
+  source = "./modules/addons-iam"
+
+  oidc_issuer_url = module.eks.oidc_issuer_url
+}

@@ -118,6 +118,15 @@ resource "aws_vpc_security_group_egress_rule" "node_to_cluster_https" {
   referenced_security_group_id = aws_security_group.cluster_sg.id
 }
 
+resource "aws_vpc_security_group_egress_rule" "node_to_internet_https" {
+  security_group_id = aws_security_group.node_sg.id
+
+  ip_protocol = "tcp"
+  from_port   = 443
+  to_port     = 443
+  cidr_ipv4   = "0.0.0.0/0"
+}
+
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_kubelet" {
   security_group_id = aws_security_group.node_sg.id
 
@@ -166,3 +175,22 @@ resource "aws_launch_template" "eks_nodes" {
   ]
 }
 
+resource "aws_vpc_security_group_egress_rule" "cluster_to_node_webhook" {
+  security_group_id = aws_security_group.cluster_sg.id
+
+  referenced_security_group_id = aws_security_group.node_sg.id
+
+  ip_protocol = "tcp"
+  from_port   = 9443
+  to_port     = 9443
+}
+
+resource "aws_vpc_security_group_ingress_rule" "node_from_cluster_webhook" {
+  security_group_id = aws_security_group.node_sg.id
+
+  referenced_security_group_id = aws_security_group.cluster_sg.id
+
+  ip_protocol = "tcp"
+  from_port   = 9443
+  to_port     = 9443
+}
