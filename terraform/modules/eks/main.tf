@@ -193,4 +193,18 @@ resource "aws_vpc_security_group_ingress_rule" "node_from_cluster_webhook" {
   ip_protocol = "tcp"
   from_port   = 9443
   to_port     = 9443
+
+  description = "Allow EKS control plane to reach AWS Load Balancer Controller webhook"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cluster_to_node_webhook" {
+  security_group_id = aws_security_group.node_sg.id
+
+  referenced_security_group_id = aws_security_group.cluster_sg.id
+
+  from_port   = 8443
+  to_port     = 8443
+  ip_protocol = "tcp"
+
+  description = "Allow EKS control plane to reach NGINX admission webhook"
 }

@@ -2,8 +2,6 @@ clusterName: "2048-eks-cluster"
 
 region: "eu-west-2"
 
-vpcId: "vpc-0da550afd49dec985"
-
 serviceAccount:
   create: true
   name: "aws-load-balancer-controller"
