@@ -108,7 +108,10 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ecr:PutImage",
       "ecr:InitiateLayerUpload",
       "ecr:UploadLayerPart",
-      "ecr:CompleteLayerUpload"
+      "ecr:CompleteLayerUpload",
+      "ecr:ListTagsForResource",
+      "ecr:TagResource",
+      "ecr:UntagResource"
     ]
 
     resources = [
@@ -126,27 +129,22 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:CreateVpc",
       "ec2:DeleteVpc",
       "ec2:ModifyVpcAttribute",
-
       "ec2:DescribeSubnets",
       "ec2:CreateSubnet",
       "ec2:DeleteSubnet",
       "ec2:ModifySubnetAttribute",
-
       "ec2:DescribeInternetGateways",
       "ec2:CreateInternetGateway",
       "ec2:DeleteInternetGateway",
       "ec2:AttachInternetGateway",
       "ec2:DetachInternetGateway",
       "ec2:DescribeNetworkInterfaces",
-
       "ec2:DescribeAddresses",
       "ec2:AllocateAddress",
       "ec2:ReleaseAddress",
-
       "ec2:DescribeNatGateways",
       "ec2:CreateNatGateway",
       "ec2:DeleteNatGateway",
-
       "ec2:DescribeRouteTables",
       "ec2:CreateRouteTable",
       "ec2:DeleteRouteTable",
@@ -156,7 +154,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DisassociateRouteTable",
       "ec2:ReplaceRoute",
       "ec2:ReplaceRouteTableAssociation",
-
       "ec2:DescribeSecurityGroups",
       "ec2:CreateSecurityGroup",
       "ec2:DeleteSecurityGroup",
@@ -164,18 +161,17 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:AuthorizeSecurityGroupEgress",
       "ec2:RevokeSecurityGroupIngress",
       "ec2:RevokeSecurityGroupEgress",
-
       "ec2:DescribeVpcEndpoints",
       "ec2:CreateVpcEndpoint",
       "ec2:DeleteVpcEndpoints",
       "ec2:ModifyVpcEndpoint",
       "ec2:DescribeVpcEndpointServices",
-
       "ec2:DescribeAvailabilityZones",
-
       "ec2:CreateTags",
       "ec2:DeleteTags",
-      "ec2:DescribeTags"
+      "ec2:DescribeTags",
+      "ec2:DescribeVpcAttribute",
+      "ec2:DescribeAddressesAttribute"
     ]
 
     resources = ["*"]
@@ -191,18 +187,15 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "eks:DeleteCluster",
       "eks:UpdateClusterConfig",
       "eks:UpdateClusterVersion",
-
       "eks:CreateNodegroup",
       "eks:DescribeNodegroup",
       "eks:DeleteNodegroup",
       "eks:UpdateNodegroupConfig",
       "eks:UpdateNodegroupVersion",
-
       "eks:ListClusters",
       "eks:ListNodegroups",
       "eks:ListUpdates",
       "eks:DescribeUpdate",
-
       "eks:TagResource",
       "eks:UntagResource"
     ]
@@ -229,6 +222,42 @@ data "aws_iam_policy_document" "github_actions_permissions" {
 
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/2048-eks-*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "route53:CreateHostedZone",
+      "route53:DeleteHostedZone",
+      "route53:GetHostedZone",
+      "route53:ListHostedZones",
+      "route53:ListResourceRecordSets",
+      "route53:ChangeResourceRecordSets",
+      "route53:GetChange",
+      "route53:ListTagsForResource",
+      "route53:ChangeTagsForResource"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "iam:CreatePolicy",
+      "iam:DeletePolicy",
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListPolicyVersions",
+      "iam:TagPolicy",
+      "iam:UntagPolicy"
+    ]
+
+    resources = [
+      "arn:aws:iam::435059220418:policy/2048-eks-*"
     ]
   }
 
