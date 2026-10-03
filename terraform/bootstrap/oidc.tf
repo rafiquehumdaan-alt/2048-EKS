@@ -1,21 +1,18 @@
 data "aws_caller_identity" "current" {}
 
 
-# GitHub OIDC Provider
 resource "aws_iam_openid_connect_provider" "oidc_provider" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 }
 
 
-# GitHub Actions IAM Role
 resource "aws_iam_role" "github_actions_role" {
   name               = "2048-eks-github-actions-role"
   assume_role_policy = data.aws_iam_policy_document.github_actions_trust.json
 }
 
 
-# Trust Policy - Allows GitHub Actions from the main branch to assume the role
 data "aws_iam_policy_document" "github_actions_trust" {
   statement {
     effect = "Allow"
@@ -47,7 +44,6 @@ data "aws_iam_policy_document" "github_actions_trust" {
 }
 
 
-# GitHub Actions Permissions Policy
 resource "aws_iam_policy" "github_actions_policy" {
   name   = "2048-eks-github-actions-policy"
   policy = data.aws_iam_policy_document.github_actions_permissions.json
@@ -56,7 +52,6 @@ resource "aws_iam_policy" "github_actions_policy" {
 
 data "aws_iam_policy_document" "github_actions_permissions" {
 
-  # Terraform State Bucket
   statement {
     effect = "Allow"
 
@@ -69,7 +64,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     ]
   }
 
-  # Terraform State Objects
   statement {
     effect = "Allow"
 
@@ -85,9 +79,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # ECR Authentication
-  # ECR authentication tokens cannot be restricted to a specific repository,
-  # so all resources (*) are required.
   statement {
     effect = "Allow"
 
@@ -99,7 +90,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # ECR Repository
   statement {
     effect = "Allow"
 
@@ -127,41 +117,36 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # VPC / EC2 Networking
   statement {
     effect = "Allow"
 
     actions = [
-      # VPC
+      
       "ec2:DescribeVpcs",
       "ec2:CreateVpc",
       "ec2:DeleteVpc",
       "ec2:ModifyVpcAttribute",
 
-      # Subnets
       "ec2:DescribeSubnets",
       "ec2:CreateSubnet",
       "ec2:DeleteSubnet",
       "ec2:ModifySubnetAttribute",
 
-      # Internet Gateways
       "ec2:DescribeInternetGateways",
       "ec2:CreateInternetGateway",
       "ec2:DeleteInternetGateway",
       "ec2:AttachInternetGateway",
       "ec2:DetachInternetGateway",
+      "ec2:DescribeNetworkInterfaces",
 
-      # Elastic IPs
       "ec2:DescribeAddresses",
       "ec2:AllocateAddress",
       "ec2:ReleaseAddress",
 
-      # NAT Gateways
       "ec2:DescribeNatGateways",
       "ec2:CreateNatGateway",
       "ec2:DeleteNatGateway",
 
-      # Route Tables / Routes
       "ec2:DescribeRouteTables",
       "ec2:CreateRouteTable",
       "ec2:DeleteRouteTable",
@@ -172,7 +157,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:ReplaceRoute",
       "ec2:ReplaceRouteTableAssociation",
 
-      # Security Groups
       "ec2:DescribeSecurityGroups",
       "ec2:CreateSecurityGroup",
       "ec2:DeleteSecurityGroup",
@@ -181,17 +165,14 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:RevokeSecurityGroupIngress",
       "ec2:RevokeSecurityGroupEgress",
 
-      # VPC Endpoints
       "ec2:DescribeVpcEndpoints",
       "ec2:CreateVpcEndpoint",
       "ec2:DeleteVpcEndpoints",
       "ec2:ModifyVpcEndpoint",
       "ec2:DescribeVpcEndpointServices",
 
-      # Availability Zones
       "ec2:DescribeAvailabilityZones",
 
-      # Tags
       "ec2:CreateTags",
       "ec2:DeleteTags",
       "ec2:DescribeTags"
@@ -201,32 +182,27 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # EKS Cluster and Managed Node Groups
   statement {
     effect = "Allow"
 
     actions = [
-      # EKS Cluster
       "eks:CreateCluster",
       "eks:DescribeCluster",
       "eks:DeleteCluster",
       "eks:UpdateClusterConfig",
       "eks:UpdateClusterVersion",
 
-      # Managed Node Groups
       "eks:CreateNodegroup",
       "eks:DescribeNodegroup",
       "eks:DeleteNodegroup",
       "eks:UpdateNodegroupConfig",
       "eks:UpdateNodegroupVersion",
 
-      # EKS Information / Updates
       "eks:ListClusters",
       "eks:ListNodegroups",
       "eks:ListUpdates",
       "eks:DescribeUpdate",
 
-      # Tags
       "eks:TagResource",
       "eks:UntagResource"
     ]
@@ -235,7 +211,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # Allow Terraform to create and manage IAM roles required by EKS
   statement {
     effect = "Allow"
 
@@ -258,7 +233,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
 
-  # Allow Terraform to pass project IAM roles to EKS and EC2
   statement {
     effect = "Allow"
 
@@ -283,7 +257,6 @@ data "aws_iam_policy_document" "github_actions_permissions" {
 }
 
 
-# Attach Permissions Policy to GitHub Actions Role
 resource "aws_iam_role_policy_attachment" "github_actions_role_policy_attachment" {
   role       = aws_iam_role.github_actions_role.name
   policy_arn = aws_iam_policy.github_actions_policy.arn
