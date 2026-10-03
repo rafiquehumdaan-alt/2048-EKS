@@ -73,4 +73,17 @@ module "addons_iam" {
   source = "./modules/addons-iam"
 
   oidc_issuer_url = module.eks.oidc_issuer_url
+
+  route53_zone_arn = module.dns.zone_arn
+}
+
+module "dns" {
+  source = "./modules/dns"
+
+  subdomain          = var.eks_subdomain
+  cloudflare_zone_id = var.cloudflare_zone_id
+
+  tags = {
+    Project = "2048-EKS"
+  }
 }

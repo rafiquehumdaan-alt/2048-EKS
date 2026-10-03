@@ -1,0 +1,19 @@
+provider:
+  name: aws
+
+policy: sync
+
+registry: txt
+
+txtOwnerId: 2048-eks
+
+domainFilters:
+  - eks.humdaan.co.uk
+
+serviceAccount:
+  create: true
+  name: external-dns
+
+sources:
+  - ingress
+  - service

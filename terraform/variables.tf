@@ -81,3 +81,14 @@ variable "aws_admin_principal_arn" {
   type        = string
   default     = "arn:aws:iam::435059220418:user/Humdaan"
 }
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare zone ID for humdaan.co.uk"
+  type        = string
+}
+
+variable "eks_subdomain" {
+  description = "Subdomain delegated to route 53 for the eks application"
+  type        = string
+  default     = "eks.humdaan.co.uk"
+}

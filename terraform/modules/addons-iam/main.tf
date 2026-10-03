@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 data "tls_certificate" "eks" {
   url = var.oidc_issuer_url
 }
@@ -432,3 +434,78 @@ resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
   policy_arn = aws_iam_policy.aws_load_balancer_controller.arn
 }
 
+data "aws_iam_policy_document" "external_dns" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets",
+      "route53:ListTagsForResources"
+    ]
+
+    resources = [
+      var.route53_zone_arn
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "route53:ListHostedZones"
+    ]
+
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "external_dns" {
+  name        = "2048-eks-external-dns"
+  description = "Allows ExternalDNS to manage Route 53 records"
+
+  policy = data.aws_iam_policy_document.external_dns.json
+}
+
+data "aws_iam_policy_document" "external_dns_assume_role" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "sts:AssumeRoleWithWebIdentity"
+    ]
+
+    principals {
+      type = "Federated"
+
+      identifiers = [
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.oidc_issuer}"
+      ]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer}:sub"
+      values = [
+        "system:serviceaccount:external-dns:external-dns"
+      ]
+    }
+  }
+}
+
+resource "aws_iam_role" "external_dns" {
+  name = "2048-eks-external-dns"
+
+  assume_role_policy = data.aws_iam_policy_document.external_dns_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "external_dns" {
+  role       = aws_iam_role.external_dns.name
+  policy_arn = aws_iam_policy.external_dns.arn
+}
