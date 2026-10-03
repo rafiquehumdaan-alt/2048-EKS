@@ -38,7 +38,7 @@ data "aws_iam_policy_document" "github_actions_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:rafiquehumdaan-alt/2048-EKS:ref:refs/heads/main"]
+      values   = ["repo:rafiquehumdaan-alt@295937241/2048-EKS@1374747094:ref:refs/heads/main"]
     }
   }
 }
@@ -121,7 +121,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     effect = "Allow"
 
     actions = [
-      
+
       "ec2:DescribeVpcs",
       "ec2:CreateVpc",
       "ec2:DeleteVpc",
