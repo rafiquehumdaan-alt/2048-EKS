@@ -31,6 +31,7 @@ permissions:
 jobs:
     terraform-checks:
         runs-on: ubuntu-latest
+
         defaults:
             run:
                 working-directory: terraform
@@ -135,11 +136,28 @@ jobs:
             - name: Terraform init
               run: terraform init
 
-            - name: Configure kubectl
+            - name: Check if EKS cluster exists
+              id: eks-check
               run: |
-                aws eks update-kubeconfig --name 2048-eks-cluster --region eu-west-2
+                if aws eks describe-cluster \
+                  --name 2048-eks-cluster \
+                  --region eu-west-2 >/dev/null 2>&1; then
+                  echo "exists=true" >> "$GITHUB_OUTPUT"
+                  echo "EKS cluster exists."
+                else
+                  echo "exists=false" >> "$GITHUB_OUTPUT"
+                  echo "EKS cluster does not exist. Skipping Kubernetes cleanup."
+                fi
+
+            - name: Configure kubectl
+              if: steps.eks-check.outputs.exists == 'true'
+              run: |
+                aws eks update-kubeconfig \
+                  --name 2048-eks-cluster \
+                  --region eu-west-2
 
             - name: Ensure GitHub Actions EKS access
+              if: steps.eks-check.outputs.exists == 'true'
               run: |
                 if ! aws eks describe-access-entry \
                   --cluster-name 2048-eks-cluster \
@@ -166,22 +184,50 @@ jobs:
                 else
                   echo "GitHub Actions EKS access already exists."
                 fi
-            
+
             - name: Remove ingress-nginx Helm release
+              if: steps.eks-check.outputs.exists == 'true'
               run: |
-                helm uninstall ingress-nginx -n ingress-nginx --ignore-not-found --wait --timeout 300s
+                helm uninstall ingress-nginx \
+                  -n ingress-nginx \
+                  --ignore-not-found \
+                  --wait \
+                  --timeout 300s
 
             - name: Wait for ingress-nginx load balancer cleanup
+              if: steps.eks-check.outputs.exists == 'true'
               run: |
                 sleep 60s
 
             - name: Remove aws-load-balancer-controller Helm release
+              if: steps.eks-check.outputs.exists == 'true'
               run: |
-                helm uninstall aws-load-balancer-controller -n kube-system --ignore-not-found --wait --timeout 300s
+                helm uninstall aws-load-balancer-controller \
+                  -n kube-system \
+                  --ignore-not-found \
+                  --wait \
+                  --timeout 300s
 
             - name: Remove leftover Kubernetes security groups
               run: |
-                VPC_ID=$(terraform output -raw vpc_id)
+                VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || true)
+
+                if [ -z "$VPC_ID" ]; then
+                  echo "Terraform VPC output unavailable. Trying EKS cluster..."
+
+                  VPC_ID=$(aws eks describe-cluster \
+                    --name 2048-eks-cluster \
+                    --region eu-west-2 \
+                    --query "cluster.resourcesVpcConfig.vpcId" \
+                    --output text 2>/dev/null || true)
+                fi
+
+                if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+                  echo "Could not determine VPC ID. Skipping Kubernetes security group cleanup."
+                  exit 0
+                fi
+
+                echo "Using VPC: $VPC_ID"
 
                 for attempt in {1..10}; do
                   SG_IDS=$(aws ec2 describe-security-groups \
@@ -206,7 +252,8 @@ jobs:
 
                     if [ "$ENI_COUNT" -eq 0 ]; then
                       echo "Deleting security group: $SG_ID"
-                      aws ec2 delete-security-group --group-id "$SG_ID" || true
+                      aws ec2 delete-security-group \
+                        --group-id "$SG_ID" || true
                     else
                       echo "$SG_ID is still attached to $ENI_COUNT network interface(s)."
                     fi
