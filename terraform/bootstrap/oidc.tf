@@ -171,7 +171,15 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DeleteTags",
       "ec2:DescribeTags",
       "ec2:DescribeVpcAttribute",
-      "ec2:DescribeAddressesAttribute"
+      "ec2:DescribeAddressesAttribute",
+      "ec2:CreateLaunchTemplate",
+      "ec2:DeleteLaunchTemplate",
+      "ec2:DescribeLaunchTemplates",
+      "ec2:DescribeLaunchTemplateVersions",
+      "ec2:CreateLaunchTemplateVersion",
+      "ec2:DeleteLaunchTemplateVersions",
+      "ec2:ModifyLaunchTemplate",
+      "ec2:DescribePrefixLists",
     ]
 
     resources = ["*"]
@@ -197,7 +205,15 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "eks:ListUpdates",
       "eks:DescribeUpdate",
       "eks:TagResource",
-      "eks:UntagResource"
+      "eks:UntagResource",
+      "eks:CreateAccessEntry",
+      "eks:DeleteAccessEntry",
+      "eks:DescribeAccessEntry",
+      "eks:ListAccessEntries",
+      "eks:UpdateAccessEntry",
+      "eks:AssociateAccessPolicy",
+      "eks:DisassociateAccessPolicy",
+      "eks:ListAssociatedAccessPolicies",
     ]
 
     resources = ["*"]
@@ -259,6 +275,22 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     resources = [
       "arn:aws:iam::435059220418:policy/2048-eks-*"
     ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "iam:CreateOpenIDConnectProvider",
+      "iam:GetOpenIDConnectProvider",
+      "iam:DeleteOpenIDConnectProvider",
+      "iam:ListOpenIDConnectProviders",
+      "iam:TagOpenIDConnectProvider",
+      "iam:UntagOpenIDConnectProvider",
+      "iam:UpdateOpenIDConnectProviderThumbprint"
+    ]
+
+    resources = ["*"]
   }
 
 
