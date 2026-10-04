@@ -180,7 +180,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DeleteLaunchTemplateVersions",
       "ec2:ModifyLaunchTemplate",
       "ec2:DescribePrefixLists",
-      "ec2:DescribeSecurityGroupRules"
+      "ec2:DescribeSecurityGroupRules",
+      "ec2:RunInstances"
     ]
 
     resources = ["*"]
