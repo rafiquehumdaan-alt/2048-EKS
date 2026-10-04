@@ -38,6 +38,8 @@ module "eks" {
 
   vpc_id = module.vpc.vpc_id
 
+  github_actions_role_arn = "arn:aws:iam::435059220418:role/2048-eks-github-actions-role"
+
   depends_on = [module.iam]
 }
 

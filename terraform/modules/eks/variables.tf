@@ -47,3 +47,7 @@ variable "vpc_id" {
   description = "VPC ID for the EKS security groups"
   type        = string
 }
+
+variable "github_actions_role_arn" {
+  type = string
+}

@@ -62,6 +62,24 @@ resource "aws_eks_access_policy_association" "admin_cluster_access" {
   depends_on = [aws_eks_access_entry.admin_access]
 }
 
+resource "aws_eks_access_entry" "github_actions_access" {
+  cluster_name  = aws_eks_cluster.main_cluster.name
+  principal_arn = var.github_actions_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "github_actions_cluster_access" {
+  cluster_name  = aws_eks_cluster.main_cluster.name
+  principal_arn = var.github_actions_role_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_actions_access]
+}
+
 resource "aws_security_group" "cluster_sg" {
   name   = "2048-eks-cluster-sg"
   vpc_id = var.vpc_id
