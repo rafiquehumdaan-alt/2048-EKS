@@ -280,6 +280,18 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
+  effect = "Allow"
+
+  actions = [
+    "iam:GetRole"
+  ]
+
+  resources = [
+    "arn:aws:iam::435059220418:role/aws-service-role/eks-nodegroup.amazonaws.com/AWSServiceRoleForAmazonEKSNodegroup"
+  ]
+}
+
+  statement {
     effect = "Allow"
 
     actions = [
