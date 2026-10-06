@@ -15,6 +15,16 @@ on:
             - "app/**"
             - ".github/workflows/application.yaml"
 
+    workflow_dispatch:
+        inputs:
+            action:
+                description: "Action to perform"
+                required: true
+                type: choice
+                options:
+                    - deploy image
+                    - scan image
+
 
 permissions:
     contents: write
@@ -39,31 +49,31 @@ jobs:
                   severity: CRITICAL,HIGH
 
             - name: Configure AWS Credentials
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
               uses: aws-actions/configure-aws-credentials@v4
               with:
                   role-to-assume: ${{ vars.AWS_ROLE_ARN }}
                   aws-region: eu-west-2
 
             - name: Login to ECR repository
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
               uses: aws-actions/amazon-ecr-login@v2
 
             - name: Push Docker image to ECR
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
               run: |
                   docker tag 2048:latest ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
                   docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
 
             - name: Update Kubernetes image tag
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
               run: |
                   sed -i \
                     's|${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:[^"]*|${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}|' \
                     kubernetes/deployment.yaml
 
             - name: Commit Kubernetes image update
-              if: github.event_name == 'push'
+              if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
