@@ -11,10 +11,10 @@ resource "aws_security_group" "endpoint_sg" {
 resource "aws_vpc_security_group_ingress_rule" "endpoint_ingress" {
   security_group_id            = aws_security_group.endpoint_sg.id
   referenced_security_group_id = var.node_sg_id
-
-  from_port   = 443
-  to_port     = 443
-  ip_protocol = "tcp"
+  description                  = "Allow nodes to communicate with VPC endpoints over HTTPS"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
 }
 
 resource "aws_vpc_endpoint" "ecr_api" {

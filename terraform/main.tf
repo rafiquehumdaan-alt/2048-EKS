@@ -56,19 +56,19 @@ module "vpc_endpoints" {
 resource "aws_vpc_security_group_egress_rule" "node_to_vpc_endpoints" {
   security_group_id            = module.eks.node_sg_id
   referenced_security_group_id = module.vpc_endpoints.endpoint_sg_id
-
-  from_port   = 443
-  to_port     = 443
-  ip_protocol = "tcp"
+  description                  = "Allow worker nodes to communicate with VPC endpoints over HTTPS"
+  from_port                    = 443
+  to_port                      = 443
+  ip_protocol                  = "tcp"
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_s3" {
   security_group_id = module.eks.node_sg_id
   prefix_list_id    = module.vpc_endpoints.s3_prefix_list_id
-
-  from_port   = 443
-  to_port     = 443
-  ip_protocol = "tcp"
+  description       = "Allow worker nodes to communicate with S3 over HTTPS"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
 }
 
 module "addons_iam" {

@@ -81,27 +81,30 @@ resource "aws_eks_access_policy_association" "github_actions_cluster_access" {
 }
 
 resource "aws_security_group" "cluster_sg" {
-  name   = "2048-eks-cluster-sg"
-  vpc_id = var.vpc_id
+  name        = "2048-eks-cluster-sg"
+  description = "Security group for the EKS control plane"
+  vpc_id      = var.vpc_id
 }
 
 resource "aws_security_group" "node_sg" {
-  name   = "2048-eks-node-sg"
-  vpc_id = var.vpc_id
+  name        = "2048-eks-node-sg"
+  description = "Security group for the EKS worker nodes"
+  vpc_id      = var.vpc_id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "ingress_node_sg" {
   security_group_id = aws_security_group.node_sg.id
-
-  from_port   = 10250
-  to_port     = 10250
-  ip_protocol = "tcp"
+  description       = "Allow EKS control plane to reach kubelet on worker nodes"
+  from_port         = 10250
+  to_port           = 10250
+  ip_protocol       = "tcp"
 
   referenced_security_group_id = aws_security_group.cluster_sg.id
 }
 
 resource "aws_vpc_security_group_ingress_rule" "ingress_cluster_sg" {
   security_group_id = aws_security_group.cluster_sg.id
+  description       = "Allow worker nodes to reach the EKS control plane over HTTPS"
 
   from_port   = 443
   to_port     = 443
@@ -111,6 +114,7 @@ resource "aws_vpc_security_group_ingress_rule" "ingress_cluster_sg" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "node_to_node" {
+  description       = "Allow worker nodes to communicate with each other"
   security_group_id = aws_security_group.node_sg.id
 
   ip_protocol = "-1"
@@ -119,6 +123,7 @@ resource "aws_vpc_security_group_ingress_rule" "node_to_node" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_node_egress" {
+  description       = "Allow outbound traffic from worker nodes to other worker nodes"
   security_group_id = aws_security_group.node_sg.id
 
   ip_protocol = "-1"
@@ -127,6 +132,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_node_egress" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_https" {
+  description       = "Allow worker nodes to reach the EKS control plane over HTTPS"
   security_group_id = aws_security_group.node_sg.id
 
   from_port   = 443
@@ -137,6 +143,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_cluster_https" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_internet_https" {
+  description       = "Allow worker nodes to reach the internet over HTTPS"
   security_group_id = aws_security_group.node_sg.id
 
   ip_protocol = "tcp"
@@ -146,6 +153,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_internet_https" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_kubelet" {
+  description       = "Allow worker nodes to reach the EKS control plane kubelet"
   security_group_id = aws_security_group.node_sg.id
 
   from_port   = 10250
@@ -156,6 +164,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_cluster_kubelet" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_dns_tcp" {
+  description       = "Allow worker nodes DNS traffic over TCP"
   security_group_id = aws_security_group.node_sg.id
 
   from_port   = 53
@@ -166,6 +175,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_cluster_dns_tcp" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "node_to_cluster_dns_udp" {
+  description       = "Allow worker nodes DNS traffic over UDP"
   security_group_id = aws_security_group.node_sg.id
 
   from_port   = 53
@@ -176,6 +186,7 @@ resource "aws_vpc_security_group_egress_rule" "node_to_cluster_dns_udp" {
 }
 
 resource "aws_vpc_security_group_egress_rule" "cluster_to_node_kubelet" {
+  description       = "Allow EKS control plane to reach kubelet on worker nodes"
   security_group_id = aws_security_group.cluster_sg.id
 
   from_port   = 10250
@@ -191,9 +202,15 @@ resource "aws_launch_template" "eks_nodes" {
   vpc_security_group_ids = [
     aws_security_group.node_sg.id
   ]
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
 }
 
 resource "aws_vpc_security_group_egress_rule" "cluster_to_node_webhook" {
+  description       = "Allow EKS control plane to reach AWS Load Balancer Controller webhook"
   security_group_id = aws_security_group.cluster_sg.id
 
   referenced_security_group_id = aws_security_group.node_sg.id
