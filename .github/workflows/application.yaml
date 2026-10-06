@@ -52,9 +52,7 @@ jobs:
             - name: Push Docker image to ECR
               if: github.event_name == 'push'
               run: |
-                  docker tag 2048:latest ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:latest
                   docker tag 2048:latest ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
-                  docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:latest
                   docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
 
             - name: Update Kubernetes image tag
