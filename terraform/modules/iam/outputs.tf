@@ -8,7 +8,3 @@ output "eks_node_role_arn" {
   value       = aws_iam_role.eks_managed_node_group_role.arn
 }
 
-output "vpc_flow_logs_role_arn" {
-  description = "Flow log role ARN for the VPC flow logs IAM role"
-  value       = aws_iam_role.vpc_flow_logs.arn
-}

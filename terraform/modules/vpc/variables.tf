@@ -18,7 +18,3 @@ variable "availability_zones" {
   type        = list(string)
 }
 
-variable "vpc_flow_logs_role_arn" {
-  type        = string
-  description = "ARN of the IAM role for VPC flow logs"
-}
