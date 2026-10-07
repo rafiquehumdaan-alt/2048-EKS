@@ -1,3 +1,4 @@
+
 resource "aws_eks_cluster" "main_cluster" {
   name     = var.cluster_name
   role_arn = var.cluster_role_arn
@@ -12,6 +13,14 @@ resource "aws_eks_cluster" "main_cluster" {
 
   access_config {
     authentication_mode = "API"
+  }
+
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks_secrets.arn
+    }
+
+    resources = ["secrets"]
   }
 
   enabled_cluster_log_types = [
@@ -242,4 +251,18 @@ resource "aws_vpc_security_group_ingress_rule" "cluster_to_node_webhook" {
   ip_protocol = "tcp"
 
   description = "Allow EKS control plane to reach NGINX admission webhook"
+}
+
+resource "aws_kms_key" "eks_secrets" {
+  description             = "KMS key for EKS Kubernetes Secrets encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags = {
+    Name = "${var.cluster_name}-secrets-key"
+  }
+}
+
+resource "aws_kms_alias" "eks_secrets_alias" {
+  name          = "alias/${var.cluster_name}-secrets-key"
+  target_key_id = aws_kms_key.eks_secrets.id
 }

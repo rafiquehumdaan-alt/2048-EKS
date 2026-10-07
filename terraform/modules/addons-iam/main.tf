@@ -416,6 +416,7 @@ data "aws_iam_policy_document" "aws_load_balancer_controller" {
   }
 }
 
+
 resource "aws_iam_policy" "aws_load_balancer_controller" {
   name        = "2048-eks-aws-load-balancer-controller-policy"
   description = "IAM permissions for the AWS Load Balancer Controller"

@@ -49,7 +49,6 @@ resource "aws_iam_policy" "github_actions_policy" {
   policy = data.aws_iam_policy_document.github_actions_permissions.json
 }
 
-
 data "aws_iam_policy_document" "github_actions_permissions" {
 
   statement {

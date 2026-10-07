@@ -101,3 +101,16 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index].id
 }
+
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/2048-flow-logs"
+  retention_in_days = 30
+}
+
+resource "aws_flow_log" "main" {
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL"
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  log_destination_type = "cloud-watch-logs"
+  iam_role_arn         = var.vpc_flow_logs_role_arn
+}
