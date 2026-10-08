@@ -1,0 +1,21 @@
+helm:
+  releaseName: ingress-nginx
+  valueFile:
+  - $values/helm/ingress-nginx-values.yaml
+
+  repoURL: 'https://github.com/rafiquehumdaan-alt/2048-EKS.git'
+  targetRevision: main
+  ref: values
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: "ingress-nginx"
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
