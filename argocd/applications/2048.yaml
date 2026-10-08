@@ -1,0 +1,21 @@
+namespace: argocd
+
+spec:
+  project: default
+
+source:
+  repoURL: 'https://github.com/rafiquehumdaan-alt/2048-EKS.git'
+  targetRevision: main
+  path: kubernetes
+
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: "2048"
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true
