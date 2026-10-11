@@ -6,3 +6,6 @@ serviceAccount:
   name: cert-manager
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::435059220418:role/2048-eks-cert-manager
+
+dns01RecursiveNameservers: "10.0.0.2:53"
+dns01RecursiveNameserversOnly: true
