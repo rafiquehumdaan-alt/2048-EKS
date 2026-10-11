@@ -5,18 +5,16 @@ metadata:
   name: 2048
   namespace: argocd
 
-namespace: argocd
-
 spec:
   project: default
 
-source:
-  repoURL: "https://github.com/rafiquehumdaan-alt/2048-EKS.git"
-  targetRevision: main
-  path: kubernetes
+  source:
+    repoURL: https://github.com/rafiquehumdaan-alt/2048-EKS.git
+    targetRevision: main
+    path: kubernetes
 
   destination:
-    server: "https://kubernetes.default.svc"
+    server: https://kubernetes.default.svc
     namespace: "2048"
 
   syncPolicy:
