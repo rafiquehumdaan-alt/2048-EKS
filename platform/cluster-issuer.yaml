@@ -3,7 +3,7 @@ kind: ClusterIssuer
 
 metadata:
   name: letsencrypt
-  
+
 spec:
   acme:
     email: rafiquehumdaan@gmail.com
@@ -13,6 +13,7 @@ spec:
       name: letsencrypt
 
     solvers:
-      - http01:
-          ingress:
-            class: nginx
+      - dns01:
+          route53:
+            region: eu-west-2
+            hostedZoneID: Z010944539E4QT54REPO

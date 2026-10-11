@@ -1,2 +1,8 @@
 crds:
   enabled: true
+
+serviceAccount:
+  create: true
+  name: cert-manager
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::435059220418:role/2048-eks-cert-manager
