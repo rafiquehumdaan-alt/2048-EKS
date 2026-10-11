@@ -353,12 +353,6 @@ jobs:
               -n argocd --timeout=300s
           fi
 
-            kubectl delete application cluster-issuer -n argocd --wait=false
-
-            kubectl wait --for=delete application/cluster-issuer \
-              -n argocd --timeout=300s
-          fi
-
       - name: Remove AWS Load Balancer Controller and cert-manager
         if: steps.eks-check.outputs.exists == 'true'
         run: |
