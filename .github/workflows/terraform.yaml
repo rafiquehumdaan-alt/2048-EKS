@@ -168,11 +168,7 @@ jobs:
 
       - name: Wait for cert-manager
         run: |
-          kubectl wait --for=condition=established crd/clusterissuers.cert-manager.io --timeout=300s
-
-          kubectl rollout status deployment/cert-manager -n cert-manager --timeout=300s
-          kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=300s
-          kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=300s
+          kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/cert-manager -n argocd --timeout=600s
 
       - name: Register cluster-issuer Application
         run: |
@@ -278,6 +274,91 @@ jobs:
             echo "GitHub Actions EKS access already exists."
           fi
 
+      - name: Remove 2048 Application
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          if kubectl get application 2048 -n argocd >/dev/null 2>&1; then
+            kubectl patch application 2048 -n argocd --type merge -p '{"metadata":{"finalizers":[resources.finalizer.argocd.argoproj.io]}}'
+            kubectl delete application 2048 -n argocd --wait=false
+            kubectl wait --for=delete application 2048 -n argocd --timeout=300s
+          fi
+
+      - name: Remove ingress-nginx Application
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          if kubectl get application ingress-nginx -n argocd >/dev/null 2>&1; then
+            kubectl patch application ingress-nginx -n argocd --type merge -p '{"metadata":{"finalizers":[resources.finalizer.argocd.argoproj.io]}}'
+            kubectl delete application ingress-nginx -n argocd --wait=false
+            kubectl wait --for=delete application ingress-nginx -n argocd --timeout=600s
+          fi
+
+      - name: Wait for NLB deletion
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          VPC_ID=$(terraform output -raw vpc_id)
+
+          for attempt in {1..20}; do
+            NLB_COUNT=$(aws elbv2 describe-load-balancers \
+              --region eu-west-2 \
+              --query "length(LoadBalancers[?Type=='network' && VpcId=='$VPC_ID'])" \
+              --output text)
+
+            if [ "$NLB_COUNT" -eq 0 ]; then
+              echo "All NLBs in the VPC have been deleted."
+              exit 0
+            fi
+
+            echo "Waiting for $NLB_COUNT NLB(s) to be deleted..."
+            sleep 15
+          done
+
+          echo "NLB deletion timed out."
+          exit 1
+
+      - name: Remove ExternalDNS Application
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          if kubectl get application external-dns -n argocd >/dev/null 2>&1; then
+            kubectl patch application external-dns -n argocd \
+              --type merge \
+              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
+            kubectl delete application external-dns -n argocd --wait=false
+
+            kubectl wait --for=delete application/external-dns \
+              -n argocd --timeout=300s
+          fi
+
+      - name: Remove ClusterIssuer Application
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          if kubectl get application cluster-issuer -n argocd >/dev/null 2>&1; then
+            kubectl patch application cluster-issuer -n argocd \
+              --type merge \
+              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
+            kubectl delete application cluster-issuer -n argocd --wait=false
+
+            kubectl wait --for=delete application/cluster-issuer \
+              -n argocd --timeout=300s
+          fi
+
+      - name: Remove AWS Load Balancer Controller and cert-manager
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          for APP in aws-load-balancer-controller cert-manager; do
+            if kubectl get application "$APP" -n argocd >/dev/null 2>&1; then
+              kubectl patch application "$APP" -n argocd \
+                --type merge \
+                -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
+              kubectl delete application "$APP" -n argocd --wait=false
+
+              kubectl wait --for=delete application/"$APP" \
+                -n argocd --timeout=300s
+            fi
+          done
+
       - name: Remove ArgoCD Helm release
         if: steps.eks-check.outputs.exists == 'true'
         run: |
@@ -291,29 +372,6 @@ jobs:
         if: steps.eks-check.outputs.exists == 'true'
         run: |
           kubectl delete namespace argocd --ignore-not-found=true --wait=true --timeout=300s
-
-      - name: Remove ingress-nginx Helm release
-        if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          helm uninstall ingress-nginx \
-            -n ingress-nginx \
-            --ignore-not-found \
-            --wait \
-            --timeout 300s
-
-      - name: Wait for ingress-nginx load balancer cleanup
-        if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          sleep 60s
-
-      - name: Remove aws-load-balancer-controller Helm release
-        if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          helm uninstall aws-load-balancer-controller \
-            -n kube-system \
-            --ignore-not-found \
-            --wait \
-            --timeout 300s
 
       - name: Remove leftover Kubernetes security groups
         run: |
