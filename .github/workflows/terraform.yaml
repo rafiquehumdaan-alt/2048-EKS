@@ -278,18 +278,28 @@ jobs:
         if: steps.eks-check.outputs.exists == 'true'
         run: |
           if kubectl get application 2048 -n argocd >/dev/null 2>&1; then
-            kubectl patch application 2048 -n argocd --type merge -p '{"metadata":{"finalizers":[resources.finalizer.argocd.argoproj.io]}}'
+            kubectl patch application 2048 -n argocd \
+              --type merge \
+              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
             kubectl delete application 2048 -n argocd --wait=false
-            kubectl wait --for=delete application 2048 -n argocd --timeout=300s
+
+            kubectl wait --for=delete application/2048 \
+              -n argocd --timeout=300s
           fi
 
       - name: Remove ingress-nginx Application
         if: steps.eks-check.outputs.exists == 'true'
         run: |
           if kubectl get application ingress-nginx -n argocd >/dev/null 2>&1; then
-            kubectl patch application ingress-nginx -n argocd --type merge -p '{"metadata":{"finalizers":[resources.finalizer.argocd.argoproj.io]}}'
+            kubectl patch application ingress-nginx -n argocd \
+              --type merge \
+              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
             kubectl delete application ingress-nginx -n argocd --wait=false
-            kubectl wait --for=delete application ingress-nginx -n argocd --timeout=600s
+
+            kubectl wait --for=delete application/ingress-nginx \
+              -n argocd --timeout=600s
           fi
 
       - name: Wait for NLB deletion
@@ -336,6 +346,12 @@ jobs:
             kubectl patch application cluster-issuer -n argocd \
               --type merge \
               -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
+            kubectl delete application cluster-issuer -n argocd --wait=false
+
+            kubectl wait --for=delete application/cluster-issuer \
+              -n argocd --timeout=300s
+          fi
 
             kubectl delete application cluster-issuer -n argocd --wait=false
 
