@@ -193,7 +193,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DescribePrefixLists",
       "ec2:DescribeSecurityGroupRules",
       "ec2:RunInstances",
-      "ec2:DisassociateAddress"
+      "ec2:DisassociateAddress",
+      "ec2:DeleteNetworkInterface"
     ]
 
     resources = ["*"]
