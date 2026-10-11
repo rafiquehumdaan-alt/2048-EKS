@@ -13,6 +13,8 @@ domainFilters:
 serviceAccount:
   create: true
   name: external-dns
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::435059220418:role/2048-eks-external-dns"
 
 sources:
   - ingress

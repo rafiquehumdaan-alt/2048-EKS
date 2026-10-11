@@ -16,6 +16,9 @@ spec:
         releaseName: aws-load-balancer-controller
         valueFiles:
           - $values/helm/aws-load-balancer-controller-values.yaml
+        parameters:
+        - name: vpcId
+          value: "__VPC_ID__"
 
     - repoURL: https://github.com/rafiquehumdaan-alt/2048-EKS.git
       targetRevision: main

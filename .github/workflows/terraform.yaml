@@ -155,6 +155,45 @@ jobs:
           echo "ArgoCD Helm release:"
           helm list -n argocd
 
+      - name: Register AWS Load Balancer Controller Application
+        run: |
+          VPC_ID=$(terraform output -raw vpc_id)
+            
+          sed "s/__VPC_ID__/$VPC_ID/g" ../argocd/applications/aws-load-balancer-controller.yaml > /tmp/aws-load-balancer-controller.yaml
+          kubectl apply -f /tmp/aws-load-balancer-controller.yaml
+
+      - name: Register cert-manager Application
+        run: |
+          kubectl apply -f ../argocd/applications/cert-manager.yaml
+
+      - name: Wait for cert-manager
+        run: |
+          kubectl wait --for=condition=established crd/clusterissuers.cert-manager.io --timeout=300s
+
+          kubectl rollout status deployment/cert-manager -n cert-manager --timeout=300s
+          kubectl rollout status deployment/cert-manager-webhook -n cert-manager --timeout=300s
+          kubectl rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=300s
+
+      - name: Register cluster-issuer Application
+        run: |
+          kubectl apply -f ../argocd/applications/cluster-issuer.yaml
+
+      - name: Wait for AWS Load Balancer Controller
+        run: |
+          kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/aws-load-balancer-controller -n argocd --timeout=600s
+
+      - name: Register ingress-nginx Application
+        run: |
+          kubectl apply -f ../argocd/applications/ingress-nginx.yaml
+
+      - name: Register ExternalDNS Application
+        run: |
+          kubectl apply -f ../argocd/applications/external-dns.yaml
+
+      - name: Register 2048 Application
+        run: |
+          kubectl apply -f ../argocd/applications/2048.yaml
+
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     needs: terraform-checks
