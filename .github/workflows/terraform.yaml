@@ -467,8 +467,94 @@ jobs:
           echo "Some Kubernetes security groups still remain after waiting."
           exit 1
 
+      - name: Remove leftover Route 53 records
+        run: |
+          ZONE_ID=$(terraform output -raw eks_route53_zone_id 2>/dev/null || true)
+
+          if [ -z "$ZONE_ID" ]; then
+            echo "No Route 53 zone in Terraform state. Skipping."
+            exit 0
+          fi
+
+          aws route53 list-resource-record-sets \
+            --hosted-zone-id "$ZONE_ID" \
+            --output json |
+            jq '{
+              Changes: [
+                .ResourceRecordSets[]
+                | select(
+                    .Name == "eks.humdaan.co.uk." and
+                    (.Type == "A" or .Type == "AAAA")
+                  )
+                | {Action: "DELETE", ResourceRecordSet: .}
+              ]
+            }' > /tmp/2048-dns-cleanup.json
+
+          COUNT=$(jq '.Changes | length' /tmp/2048-dns-cleanup.json)
+
+          if [ "$COUNT" -gt 0 ]; then
+            CHANGE_ID=$(aws route53 change-resource-record-sets \
+              --hosted-zone-id "$ZONE_ID" \
+              --change-batch file:///tmp/2048-dns-cleanup.json \
+              --query ChangeInfo.Id --output text)
+
+            aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
+          fi
+
+          echo "Route 53 cleanup complete."
+
       - name: Terraform plan for destroy
         run: terraform plan -destroy -out=destroy.tfplan
 
       - name: Terraform destroy
-        run: terraform apply -auto-approve destroy.tfplan
+        run: |
+          if terraform apply -auto-approve destroy.tfplan; then
+            exit 0
+          fi
+
+          echo "Initial destroy failed. Checking for orphaned Kubernetes ENIs..."
+
+          # Do not clean up ENIs while managed node groups still exist.
+          if aws eks describe-cluster \
+            --name 2048-eks-cluster --region eu-west-2 \
+            >/dev/null 2>&1; then
+
+            NODEGROUPS=$(aws eks list-nodegroups \
+              --cluster-name 2048-eks-cluster \
+              --region eu-west-2 \
+              --query 'length(nodegroups)' --output text)
+
+            if [ "$NODEGROUPS" -ne 0 ]; then
+              echo "Node groups still exist. Refusing ENI cleanup."
+              exit 1
+            fi
+          fi
+
+          VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || true)
+
+          if [ -n "$VPC_ID" ]; then
+            aws ec2 describe-network-interfaces \
+              --region eu-west-2 \
+              --filters "Name=vpc-id,Values=$VPC_ID" \
+              --output json |
+              jq -r '.NetworkInterfaces[]
+                | select(
+                    .Status == "available" and
+                    .RequesterManaged == false and
+                    .Attachment == null and
+                    (.Description | startswith("aws-K8S-"))
+                  )
+                | .NetworkInterfaceId' > /tmp/orphaned-enis.txt
+
+            while read -r ENI_ID; do
+              [ -z "$ENI_ID" ] && continue
+              echo "Deleting orphaned ENI: $ENI_ID"
+              aws ec2 delete-network-interface \
+                --region eu-west-2 \
+                --network-interface-id "$ENI_ID"
+            done < /tmp/orphaned-enis.txt
+          fi
+
+          echo "Retrying Terraform destroy..."
+          terraform plan -destroy -out=retry-destroy.tfplan
+          terraform apply -auto-approve retry-destroy.tfplan
