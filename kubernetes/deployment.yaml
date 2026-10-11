@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: "2048"
-          image: "435059220418.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:latest"
+          image: "435059220418.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:eba5af2c71ca30409ebc0248b8970395e61ca0f4"
 
           ports:
             - containerPort: 80
