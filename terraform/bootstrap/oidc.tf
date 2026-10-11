@@ -123,6 +123,18 @@ data "aws_iam_policy_document" "github_actions_permissions" {
     effect = "Allow"
 
     actions = [
+      "elasticloadbalancing:DescribeLoadBalancers"
+    ]
+
+    resources = ["*"]
+  }
+
+
+
+  statement {
+    effect = "Allow"
+
+    actions = [
 
       "ec2:DescribeVpcs",
       "ec2:CreateVpc",
