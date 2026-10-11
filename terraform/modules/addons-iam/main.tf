@@ -510,3 +510,79 @@ resource "aws_iam_role_policy_attachment" "external_dns" {
   role       = aws_iam_role.external_dns.name
   policy_arn = aws_iam_policy.external_dns.arn
 }
+
+
+# IAM permissions for cert-manager DNS-01 validation
+data "aws_iam_policy_document" "cert_manager" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "route53:ChangeResourceRecordSets",
+      "route53:ListResourceRecordSets"
+    ]
+
+    resources = [
+      var.route53_zone_arn
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "route53:GetChange",
+      "route53:ListHostedZonesByName"
+    ]
+
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "cert_manager" {
+  name        = "2048-eks-cert-manager"
+  description = "Allows cert-manager to perform DNS-01 validation using Route 53"
+
+  policy = data.aws_iam_policy_document.cert_manager.json
+}
+
+data "aws_iam_policy_document" "cert_manager_assume_role" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "sts:AssumeRoleWithWebIdentity"
+    ]
+
+    principals {
+      type = "Federated"
+
+      identifiers = [
+        aws_iam_openid_connect_provider.eks.arn
+      ]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_issuer}:sub"
+      values   = ["system:serviceaccount:cert-manager:cert-manager"]
+    }
+  }
+}
+
+resource "aws_iam_role" "cert_manager" {
+  name = "2048-eks-cert-manager"
+
+  assume_role_policy = data.aws_iam_policy_document.cert_manager_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "cert_manager" {
+  role       = aws_iam_role.cert_manager.name
+  policy_arn = aws_iam_policy.cert_manager.arn
+}

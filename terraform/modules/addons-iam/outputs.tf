@@ -7,3 +7,8 @@ output "external_dns_role_arn" {
   description = "IAM role ARN used by ExternalDNS"
   value       = aws_iam_role.external_dns.arn
 }
+
+output "cert_manager_role_arn" {
+  description = "IAM role ARN used by cert-manager for DNS-01 validation"
+  value       = aws_iam_role.cert_manager.arn
+}
