@@ -190,6 +190,22 @@ jobs:
         run: |
           kubectl apply -f ../argocd/applications/2048.yaml
 
+      - name: Verify ArgoCD Platform Applications
+        run: |
+          for APP in aws-load-balancer-controller cert-manager cluster-issuer ingress-nginx external-dns; do
+            echo "Checking $APP..."
+
+            kubectl wait \
+              --for=jsonpath='{.status.sync.status}'=Synced \
+              application/"$APP" -n argocd --timeout=600s
+
+            kubectl wait \
+              --for=jsonpath='{.status.health.status}'=Healthy \
+              application/"$APP" -n argocd --timeout=600s
+
+            echo "$APP is Synced and Healthy."
+          done
+
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     needs: terraform-checks
@@ -285,7 +301,7 @@ jobs:
           fi
 
       - name: Remove 2048 Application
-        if: steps.eks-check.outputs.exists == 'true'
+        if: steps.argocd-check.outputs.exists == 'true'
         run: |
           if kubectl get application 2048 -n argocd >/dev/null 2>&1; then
             kubectl patch application 2048 -n argocd \
@@ -299,7 +315,7 @@ jobs:
           fi
 
       - name: Remove ingress-nginx Application
-        if: steps.eks-check.outputs.exists == 'true'
+        if: steps.argocd-check.outputs.exists == 'true'
         run: |
           if kubectl get application ingress-nginx -n argocd >/dev/null 2>&1; then
             kubectl patch application ingress-nginx -n argocd \
@@ -336,7 +352,7 @@ jobs:
           exit 1
 
       - name: Remove ExternalDNS Application
-        if: steps.eks-check.outputs.exists == 'true'
+        if: steps.argocd-check.outputs.exists == 'true'
         run: |
           if kubectl get application external-dns -n argocd >/dev/null 2>&1; then
             kubectl patch application external-dns -n argocd \
@@ -350,7 +366,7 @@ jobs:
           fi
 
       - name: Remove ClusterIssuer Application
-        if: steps.eks-check.outputs.exists == 'true'
+        if: steps.argocd-check.outputs.exists == 'true'
         run: |
           if kubectl get application cluster-issuer -n argocd >/dev/null 2>&1; then
             kubectl patch application cluster-issuer -n argocd \
@@ -364,7 +380,7 @@ jobs:
           fi
 
       - name: Remove AWS Load Balancer Controller and cert-manager
-        if: steps.eks-check.outputs.exists == 'true'
+        if: steps.argocd-check.outputs.exists == 'true'
         run: |
           for APP in aws-load-balancer-controller cert-manager; do
             if kubectl get application "$APP" -n argocd >/dev/null 2>&1; then
