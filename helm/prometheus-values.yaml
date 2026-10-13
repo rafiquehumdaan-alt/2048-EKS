@@ -101,6 +101,9 @@ grafana:
     auth.github:
       enabled: true
       allow_sign_up: true
+
+      scopes: "user:email"
+
       role_attribute_path: "[login=='rafiquehumdaan-alt'][0] && 'Admin' || 'None'"
       role_attribute_strict: true
       allow_assign_grafana_admin: false
