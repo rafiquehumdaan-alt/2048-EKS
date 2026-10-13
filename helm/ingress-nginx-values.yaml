@@ -1,4 +1,8 @@
 controller:
+  config:
+    use-proxy-protocol: "true"
+    proxy-real-ip-cidr: "10.0.0.0/16"
+
   service:
     type: LoadBalancer
 
@@ -6,3 +10,4 @@ controller:
       service.beta.kubernetes.io/aws-load-balancer-type: "external"
       service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
       service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+      service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"

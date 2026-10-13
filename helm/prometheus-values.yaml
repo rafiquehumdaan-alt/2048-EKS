@@ -1,0 +1,106 @@
+prometheus:
+  prometheusSpec:
+    retention: 7d
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    storageSpec:
+      emptyDir:
+        sizeLimit: 5Gi
+
+prometheusOperator:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+grafana:
+  enabled: true
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  persistence:
+    enabled: false
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      # nginx.ingress.kubernetes.io/whitelist-source-range: "YOUR_PUBLIC_IP/32"
+      # Uncomment the line above and replace YOUR_PUBLIC_IP with your actual public IP to restrict access to the ingress.
+
+    hosts:
+      - grafana.eks.humdaan.co.uk
+
+    path: /
+    pathType: Prefix
+
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.eks.humdaan.co.uk
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+  grafana.ini:
+    server:
+      root_url: https://grafana.eks.humdaan.co.uk
+
+    auth.anonymous:
+      enabled: false
+
+    users:
+      allow_sign_up: false
+
+    auth.github:
+      enabled: true
+      allow_sign_up: true
+      role_attribute_path: "[login=='rafiquehumdaan-alt'][0] && 'Admin' || 'None'"
+      role_attribute_strict: true
+      allow_assign_grafana_admin: false
