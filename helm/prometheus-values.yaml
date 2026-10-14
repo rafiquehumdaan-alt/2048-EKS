@@ -88,6 +88,13 @@ grafana:
       cpu: 300m
       memory: 512Mi
 
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+
+  envFromSecret: grafana-oauth-credentials
+
   grafana.ini:
     server:
       root_url: https://grafana.eks.humdaan.co.uk

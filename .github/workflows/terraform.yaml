@@ -135,6 +135,66 @@ jobs:
         run: |
           kubectl get nodes
 
+      - name: Create Grafana Kubernetes Secrets
+        env:
+          GRAFANA_GITHUB_CLIENT_ID: ${{ secrets.GRAFANA_GITHUB_CLIENT_ID }}
+          GRAFANA_GITHUB_CLIENT_SECRET: ${{ secrets.GRAFANA_GITHUB_CLIENT_SECRET }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          for name in GRAFANA_GITHUB_CLIENT_ID GRAFANA_GITHUB_CLIENT_SECRET GRAFANA_ADMIN_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: $name"
+              exit 1
+            fi
+          done
+
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+
+          python3 - <<'PY' | kubectl apply --server-side --field-manager=grafana-secret-bootstrap -f -
+          import base64
+          import json
+          import os
+
+          def encode(value):
+              return base64.b64encode(value.encode()).decode()
+
+          secrets = [
+              {
+                  "apiVersion": "v1",
+                  "kind": "Secret",
+                  "metadata": {
+                      "name": "grafana-oauth-credentials",
+                      "namespace": "monitoring"
+                  },
+                  "type": "Opaque",
+                  "data": {
+                      "GF_AUTH_GITHUB_CLIENT_ID": encode(os.environ["GRAFANA_GITHUB_CLIENT_ID"]),
+                      "GF_AUTH_GITHUB_CLIENT_SECRET": encode(os.environ["GRAFANA_GITHUB_CLIENT_SECRET"])
+                  }
+              },
+              {
+                  "apiVersion": "v1",
+                  "kind": "Secret",
+                  "metadata": {
+                      "name": "grafana-admin-credentials",
+                      "namespace": "monitoring"
+                  },
+                  "type": "Opaque",
+                  "data": {
+                      "admin-user": encode("admin"),
+                      "admin-password": encode(os.environ["GRAFANA_ADMIN_PASSWORD"])
+                  }
+              }
+          ]
+
+          print(json.dumps({
+              "apiVersion": "v1",
+              "kind": "List",
+              "items": secrets
+          }))
+          PY
+
       - name: Add ArgoCD Helm repository
         run: |
           helm repo add argo https://argoproj.github.io/argo-helm
@@ -190,9 +250,13 @@ jobs:
         run: |
           kubectl apply -f ../argocd/applications/2048.yaml
 
+      - name: Register Monitoring Application
+        run: |
+          kubectl apply -f ../argocd/applications/monitoring.yaml
+
       - name: Verify ArgoCD Platform Applications
         run: |
-          for APP in aws-load-balancer-controller cert-manager cluster-issuer ingress-nginx external-dns; do
+          for APP in aws-load-balancer-controller cert-manager cluster-issuer ingress-nginx external-dns monitoring 2048; do
             echo "Checking $APP..."
 
             kubectl wait \
@@ -298,6 +362,20 @@ jobs:
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Remove Monitoring Application
+        if: steps.argocd-check.outputs.exists == 'true'
+        run: |
+          if kubectl get application monitoring -n argocd >/dev/null 2>&1; then
+            kubectl patch application monitoring -n argocd \
+              --type merge \
+              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+
+            kubectl delete application monitoring -n argocd --wait=false
+
+            kubectl wait --for=delete application/monitoring \
+              -n argocd --timeout=600s
           fi
 
       - name: Remove 2048 Application
