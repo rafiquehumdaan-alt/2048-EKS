@@ -64,6 +64,26 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
+    sid    = "ManageEKSCloudWatchLogs"
+    effect = "Allow"
+
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:DescribeLogGroups",
+      "logs:ListTagsForResource",
+      "logs:TagResource",
+      "logs:UntagResource",
+      "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy"
+    ]
+
+    resources = [
+      "arn:aws:logs:eu-west-2:${data.aws_caller_identity.current.account_id}:log-group:/aws/eks/2048-eks-cluster/cluster"
+    ]
+  }
+
+  statement {
     effect = "Allow"
 
     actions = [
