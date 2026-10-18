@@ -462,6 +462,42 @@ jobs:
               -n argocd --timeout=600s
           fi
 
+      - name: Verify Grafana EBS Volume Cleanup
+        if: steps.eks-check.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+
+          echo "Checking Grafana PVC..."
+
+          if kubectl get pvc monitoring-grafana -n monitoring >/dev/null 2>&1; then
+            kubectl wait --for=delete \
+              pvc/monitoring-grafana \
+              -n monitoring \
+              --timeout=300s
+          fi
+
+          echo "Checking for remaining Grafana EBS volumes..."
+
+          for attempt in {1..30}; do
+            VOLUME_IDS=$(aws ec2 describe-volumes \
+              --region eu-west-2 \
+              --filters \
+                "Name=tag:kubernetes.io/created-for/pvc/name,Values=monitoring-grafana" \
+              --query 'Volumes[].VolumeId' \
+              --output text)
+
+            if [ -z "$VOLUME_IDS" ]; then
+              echo "Grafana EBS volume cleanup confirmed."
+              exit 0
+            fi
+
+            echo "Waiting for Grafana EBS volumes to be deleted: $VOLUME_IDS"
+            sleep 10
+          done
+
+          echo "ERROR: Grafana EBS volume still exists."
+          exit 1
+
       - name: Remove 2048 Application
         if: steps.argocd-check.outputs.exists == 'true'
         run: |
@@ -658,12 +694,16 @@ jobs:
 
       - name: Remove leftover Route 53 records
         run: |
+          set -euo pipefail
+
           ZONE_ID=$(terraform output -raw eks_route53_zone_id 2>/dev/null || true)
 
           if [ -z "$ZONE_ID" ]; then
             echo "No Route 53 zone in Terraform state. Skipping."
             exit 0
           fi
+
+          echo "Cleaning Route 53 hosted zone: $ZONE_ID"
 
           aws route53 list-resource-record-sets \
             --hosted-zone-id "$ZONE_ID" \
@@ -672,22 +712,37 @@ jobs:
               Changes: [
                 .ResourceRecordSets[]
                 | select(
-                    .Name == "eks.humdaan.co.uk." and
-                    (.Type == "A" or .Type == "AAAA")
+                    (.Type != "NS" and .Type != "SOA")
+                    and
+                    (
+                      .Name == "eks.humdaan.co.uk."
+                      or (.Name | endswith(".eks.humdaan.co.uk."))
+                    )
                   )
-                | {Action: "DELETE", ResourceRecordSet: .}
+                | {
+                    Action: "DELETE",
+                    ResourceRecordSet: .
+                  }
               ]
             }' > /tmp/2048-dns-cleanup.json
 
           COUNT=$(jq '.Changes | length' /tmp/2048-dns-cleanup.json)
 
+          echo "Found $COUNT DNS records to delete."
+
           if [ "$COUNT" -gt 0 ]; then
             CHANGE_ID=$(aws route53 change-resource-record-sets \
               --hosted-zone-id "$ZONE_ID" \
               --change-batch file:///tmp/2048-dns-cleanup.json \
-              --query ChangeInfo.Id --output text)
+              --query ChangeInfo.Id \
+              --output text)
 
-            aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"
+            aws route53 wait resource-record-sets-changed \
+              --id "$CHANGE_ID"
+
+            echo "DNS records deleted successfully."
+          else
+            echo "No leftover DNS records found."
           fi
 
           echo "Route 53 cleanup complete."
@@ -747,3 +802,30 @@ jobs:
           echo "Retrying Terraform destroy..."
           terraform plan -destroy -out=retry-destroy.tfplan
           terraform apply -auto-approve retry-destroy.tfplan
+
+          
+      - name: Remove leftover EKS CloudWatch Logs
+        run: |
+          set -euo pipefail
+
+          LOG_GROUP="/aws/eks/2048-eks-cluster/cluster"
+
+          echo "Checking CloudWatch log group: $LOG_GROUP"
+
+          if aws logs describe-log-groups \
+            --region eu-west-2 \
+            --log-group-name-prefix "$LOG_GROUP" \
+            --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" \
+            --output text | grep -Fxq "$LOG_GROUP"; then
+
+            echo "Deleting leftover EKS log group..."
+
+            aws logs delete-log-group \
+              --region eu-west-2 \
+              --log-group-name "$LOG_GROUP"
+
+            echo "CloudWatch log group deleted."
+          else
+            echo "No leftover EKS log group found."
+          fi
+
