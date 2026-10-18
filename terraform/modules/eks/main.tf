@@ -15,6 +15,8 @@ resource "aws_eks_cluster" "main_cluster" {
     authentication_mode = "API"
   }
 
+  depends_on = [aws_cloudwatch_log_group.eks_cluster_logs]
+
   enabled_cluster_log_types = [
     "api",
     "audit",
@@ -245,3 +247,11 @@ resource "aws_vpc_security_group_ingress_rule" "cluster_to_node_webhook" {
   description = "Allow EKS control plane to reach NGINX admission webhook"
 }
 
+resource "aws_cloudwatch_log_group" "eks_cluster_logs" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = 7
+
+  tags = {
+    Project = "2048-EKS"
+  }
+}

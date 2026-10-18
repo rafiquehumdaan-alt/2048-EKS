@@ -246,6 +246,36 @@ jobs:
         run: |
           kubectl apply -f ../argocd/applications/external-dns.yaml
 
+      - name: Verify Platform Controllers
+        run: |
+          set -euo pipefail
+
+          for APP in \
+            aws-load-balancer-controller \
+            cert-manager \
+            cluster-issuer \
+            ingress-nginx \
+            external-dns; do
+
+            echo "Waiting for $APP..."
+
+            kubectl wait \
+              --for=jsonpath='{.status.sync.status}'=Synced \
+              "application/$APP" \
+              -n argocd \
+              --timeout=600s
+
+            kubectl wait \
+              --for=jsonpath='{.status.health.status}'=Healthy \
+              "application/$APP" \
+              -n argocd \
+              --timeout=600s
+
+            echo "$APP is ready."
+          done
+
+          echo "All platform controllers are ready."
+
       - name: Register 2048 Application
         run: |
           kubectl apply -f ../argocd/applications/2048.yaml
@@ -254,21 +284,75 @@ jobs:
         run: |
           kubectl apply -f ../argocd/applications/monitoring.yaml
 
+      - name: Verify Prometheus Operator
+        run: |
+          echo "Waiting for Prometheus CRDs to be established..."
+
+          for CRD in prometheuses.monitoring.coreos.com alertmanagers.monitoring.coreos.com servicemonitors.monitoring.coreos.com podmonitors.monitoring.coreos.com; do
+            kubectl wait --for=condition=established crd/"$CRD" --timeout=600s
+          done
+
+          echo "Waiting for Prometheus Operator deployment"
+          kubectl wait --for=create deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=600s
+          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
+          echo "Restarting Prometheus Operator after CRDs are established..."
+          kubectl rollout restart deployment/monitoring-kube-prometheus-operator -n monitoring
+          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
+          echo "Prometheus Operator is ready."
+
       - name: Verify ArgoCD Platform Applications
         run: |
-          for APP in aws-load-balancer-controller cert-manager cluster-issuer ingress-nginx external-dns monitoring 2048; do
-            echo "Checking $APP..."
+          set -euo pipefail
 
-            kubectl wait \
+          APPS=(
+            aws-load-balancer-controller
+            cert-manager
+            cluster-issuer
+            ingress-nginx
+            external-dns
+            monitoring
+            2048
+          )
+
+          for APP in "${APPS[@]}"; do
+            echo "========== Checking $APP =========="
+
+            if ! kubectl wait \
               --for=jsonpath='{.status.sync.status}'=Synced \
-              application/"$APP" -n argocd --timeout=600s
+              "application/$APP" \
+              -n argocd \
+              --timeout=600s; then
 
-            kubectl wait \
+              echo "::error::$APP failed to become Synced."
+              kubectl describe application "$APP" -n argocd || true
+              exit 1
+            fi
+
+            if ! kubectl wait \
               --for=jsonpath='{.status.health.status}'=Healthy \
-              application/"$APP" -n argocd --timeout=600s
+              "application/$APP" \
+              -n argocd \
+              --timeout=600s; then
+
+              echo "::error::$APP failed to become Healthy."
+
+              kubectl describe application "$APP" -n argocd || true
+
+              echo "Application resources:"
+              kubectl get pods,deployments,statefulsets,services \
+                -n monitoring || true
+
+              echo "Recent Kubernetes events:"
+              kubectl get events -A \
+                --sort-by=.lastTimestamp | tail -40 || true
+
+              exit 1
+            fi
 
             echo "$APP is Synced and Healthy."
           done
+
+          echo "All ArgoCD Applications are healthy."
 
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
@@ -382,15 +466,42 @@ jobs:
         if: steps.argocd-check.outputs.exists == 'true'
         run: |
           if kubectl get application 2048 -n argocd >/dev/null 2>&1; then
-            kubectl patch application 2048 -n argocd \
-              --type merge \
-              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-
+            kubectl patch application 2048 -n argocd --type merge -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
             kubectl delete application 2048 -n argocd --wait=false
-
-            kubectl wait --for=delete application/2048 \
-              -n argocd --timeout=300s
           fi
+
+          for attempt in {1..60}; do
+            APP=$(kubectl get application 2048 -n argocd --ignore-not-found -o name) || {
+            echo "Failed to connect to Kubernetes API"
+            exit 1
+            }
+
+            if [ -z "$APP" ]; then
+              echo "Application 2048 deleted."
+              exit 0
+            fi
+
+            STUCK_CHALLENGES=$(kubectl get challenges -n 2048 -o json | jq -r '
+              .items[]
+              | select(.metadata.deletionTimestamp != null)
+              | select((.status.reason // "") | contains("NoSuchHostedZone"))
+              | .metadata.name
+            ')
+
+            for CHALLENGE in $STUCK_CHALLENGES; do
+              echo "Removing obsolete finalizer from $CHALLENGE"
+
+              kubectl patch challenge "$CHALLENGE" -n 2048 \
+                --type=merge \
+                -p '{"metadata":{"finalizers":[]}}'
+            done
+
+            sleep 10
+          done
+
+          echo "2048 Application deletion timed out."
+          kubectl get challenges,orders,certificates,ingress -n 2048
+          exit 1
 
       - name: Remove ingress-nginx Application
         if: steps.argocd-check.outputs.exists == 'true'
