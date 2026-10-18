@@ -64,6 +64,17 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
+  sid    = "DescribeCloudWatchLogGroups"
+  effect = "Allow"
+
+  actions = [
+    "logs:DescribeLogGroups"
+  ]
+
+  resources = ["*"]
+}
+
+  statement {
     sid    = "ManageEKSCloudWatchLogs"
     effect = "Allow"
 
@@ -215,7 +226,8 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "ec2:DescribeSecurityGroupRules",
       "ec2:RunInstances",
       "ec2:DisassociateAddress",
-      "ec2:DeleteNetworkInterface"
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeVolumes"
     ]
 
     resources = ["*"]
