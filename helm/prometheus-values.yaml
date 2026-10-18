@@ -57,7 +57,12 @@ grafana:
     port: 80
 
   persistence:
-    enabled: false
+    enabled: true
+    type: pvc
+    storageClassName: gp3
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
 
   ingress:
     enabled: true
