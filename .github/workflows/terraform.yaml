@@ -803,7 +803,6 @@ jobs:
           terraform plan -destroy -out=retry-destroy.tfplan
           terraform apply -auto-approve retry-destroy.tfplan
 
-          
       - name: Remove leftover EKS CloudWatch Logs
         run: |
           set -euo pipefail
@@ -812,12 +811,13 @@ jobs:
 
           echo "Checking CloudWatch log group: $LOG_GROUP"
 
-          if aws logs describe-log-groups \
+          LOG_GROUPS=$(aws logs describe-log-groups \
             --region eu-west-2 \
             --log-group-name-prefix "$LOG_GROUP" \
             --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" \
-            --output text | grep -Fxq "$LOG_GROUP"; then
+            --output text)
 
+          if [ "$LOG_GROUPS" = "$LOG_GROUP" ]; then
             echo "Deleting leftover EKS log group..."
 
             aws logs delete-log-group \
@@ -828,4 +828,3 @@ jobs:
           else
             echo "No leftover EKS log group found."
           fi
-
