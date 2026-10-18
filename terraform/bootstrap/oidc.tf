@@ -250,6 +250,11 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "eks:AssociateAccessPolicy",
       "eks:DisassociateAccessPolicy",
       "eks:ListAssociatedAccessPolicies",
+      "eks:CreateAddon",
+      "eks:DescribeAddon",
+      "eks:DeleteAddon",
+      "eks:UpdateAddon",
+      "eks:ListAddons"
     ]
 
     resources = ["*"]
