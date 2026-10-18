@@ -250,8 +250,4 @@ resource "aws_vpc_security_group_ingress_rule" "cluster_to_node_webhook" {
 resource "aws_cloudwatch_log_group" "eks_cluster_logs" {
   name              = "/aws/eks/${var.cluster_name}/cluster"
   retention_in_days = 7
-
-  tags = {
-    Project = "2048-EKS"
-  }
 }
