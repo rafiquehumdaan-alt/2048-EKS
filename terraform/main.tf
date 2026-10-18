@@ -89,3 +89,16 @@ module "dns" {
     Project = "2048-EKS"
   }
 }
+
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name = var.eks_cluster_name
+  addon_name   = "aws-ebs-csi-driver"
+
+  addon_version            = "v1.67.0-eksbuild.1"
+  service_account_role_arn = module.addons_iam.ebs_csi_role_arn
+
+  depends_on = [
+    module.eks,
+    module.addons_iam
+  ]
+}

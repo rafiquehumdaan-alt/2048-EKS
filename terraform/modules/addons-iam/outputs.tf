@@ -12,3 +12,8 @@ output "cert_manager_role_arn" {
   description = "IAM role ARN used by cert-manager for DNS-01 validation"
   value       = aws_iam_role.cert_manager.arn
 }
+
+output "ebs_csi_role_arn" {
+  description = "IAM role ARN for the AWS EBS CSI Driver"
+  value       = aws_iam_role.ebs_csi.arn
+}
