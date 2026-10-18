@@ -312,7 +312,6 @@ jobs:
             ingress-nginx
             external-dns
             monitoring
-            2048
           )
 
           for APP in "${APPS[@]}"; do
