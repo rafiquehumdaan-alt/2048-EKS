@@ -64,15 +64,15 @@ data "aws_iam_policy_document" "github_actions_permissions" {
   }
 
   statement {
-  sid    = "DescribeCloudWatchLogGroups"
-  effect = "Allow"
+    sid    = "DescribeCloudWatchLogGroups"
+    effect = "Allow"
 
-  actions = [
-    "logs:DescribeLogGroups"
-  ]
+    actions = [
+      "logs:DescribeLogGroups"
+    ]
 
-  resources = ["*"]
-}
+    resources = ["*"]
+  }
 
   statement {
     sid    = "ManageEKSCloudWatchLogs"
