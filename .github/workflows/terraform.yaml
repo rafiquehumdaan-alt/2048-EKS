@@ -238,6 +238,27 @@ jobs:
         run: |
           kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/aws-load-balancer-controller -n argocd --timeout=600s
 
+      - name: Register Monitoring Application
+        run: |
+          kubectl apply -f ../argocd/applications/monitoring.yaml
+
+      - name: Verify Prometheus Operator
+        run: |
+          echo "Waiting for Prometheus CRDs to be established..."
+
+          for CRD in prometheuses.monitoring.coreos.com alertmanagers.monitoring.coreos.com servicemonitors.monitoring.coreos.com podmonitors.monitoring.coreos.com; do
+            kubectl wait --for=create crd/"$CRD" --timeout=600s
+            kubectl wait --for=condition=established crd/"$CRD" --timeout=600s
+          done
+
+          echo "Waiting for Prometheus Operator deployment"
+          kubectl wait --for=create deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=600s
+          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
+          echo "Restarting Prometheus Operator after CRDs are established..."
+          kubectl rollout restart deployment/monitoring-kube-prometheus-operator -n monitoring
+          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
+          echo "Prometheus Operator is ready."
+
       - name: Register ingress-nginx Application
         run: |
           kubectl apply -f ../argocd/applications/ingress-nginx.yaml
@@ -279,27 +300,6 @@ jobs:
       - name: Register 2048 Application
         run: |
           kubectl apply -f ../argocd/applications/2048.yaml
-
-      - name: Register Monitoring Application
-        run: |
-          kubectl apply -f ../argocd/applications/monitoring.yaml
-
-      - name: Verify Prometheus Operator
-        run: |
-          echo "Waiting for Prometheus CRDs to be established..."
-
-          for CRD in prometheuses.monitoring.coreos.com alertmanagers.monitoring.coreos.com servicemonitors.monitoring.coreos.com podmonitors.monitoring.coreos.com; do
-            kubectl wait --for=create crd/"$CRD" --timeout=600s
-            kubectl wait --for=condition=established crd/"$CRD" --timeout=600s
-          done
-
-          echo "Waiting for Prometheus Operator deployment"
-          kubectl wait --for=create deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=600s
-          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
-          echo "Restarting Prometheus Operator after CRDs are established..."
-          kubectl rollout restart deployment/monitoring-kube-prometheus-operator -n monitoring
-          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
-          echo "Prometheus Operator is ready."
 
       - name: Verify ArgoCD Platform Applications
         run: |
