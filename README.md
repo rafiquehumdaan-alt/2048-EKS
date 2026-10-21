@@ -26,7 +26,7 @@ The application runs on Amazon EKS, with Docker images stored in ECR. I use Helm
 
 I split the automation into two workflows: one for the infrastructure and one for the application.
 
-The Terraform workflow runs infrastructure checks and Checkov scans. It supports plan, apply, and destroy operations, and sets up ArgoCD when the environment is created.
+The Terraform workflow runs infrastructure checks and Checkov scans. It supports plan, apply, and destroy operations, and sets up ArgoCD when the environment is created. The Terraform Workflow must run after the bootstrap is applied first using a local 'terraform apply' command.
 
 ![Terraform apply pipeline](documentation/Screenshots/terraform-apply-pipeline.png)
 
@@ -61,4 +61,4 @@ I have added the below files for anyone interested in reading some more in depth
 - [Networking](documentation/networking.md)
 - [CI/CD](documentation/cicd-overview.md)
 
-TIME LOG: 71 HOURS
+TIME LOG: 74 HOURS

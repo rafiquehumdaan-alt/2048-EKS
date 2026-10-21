@@ -215,6 +215,12 @@ jobs:
           echo "ArgoCD Helm release:"
           helm list -n argocd
 
+      - name: Install Metrics Server
+        run: |
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+          helm repo update
+          helm upgrade --install metrics-server metrics-server/metrics-server --namespace kube-system --version 3.14.0 --wait --timeout 5m
+
       - name: Register AWS Load Balancer Controller Application
         run: |
           VPC_ID=$(terraform output -raw vpc_id)
