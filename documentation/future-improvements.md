@@ -19,3 +19,11 @@ Extend the application to support features such as saved scores, leaderboards or
 The EKS Kubernetes API currently allows both public and private access.
 
 Disable the public endpoint to reduce exposure to the internet. Administrative access and CI/CD operations would instead use a secure connection to the VPC, such as a VPN or a self-hosted GitHub Actions runner.
+
+## 4. Replace the Retired NGINX Ingress Controller
+
+The community-maintained NGINX Ingress Controller was retired in March 2026 and no longer receives security updates.
+
+Migrate to Kubernetes Gateway API using a supported controller, or replace the existing NLB and NGINX architecture with an AWS Application Load Balancer (ALB) managed by the AWS Load Balancer Controller.
+
+This would provide a maintained approach to managing application traffic and reduce reliance on deprecated infrastructure.
