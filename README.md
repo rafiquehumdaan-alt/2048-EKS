@@ -60,5 +60,3 @@ I have added the below files for anyone interested in reading some more in depth
 - [Security](documentation/security-overview.md)
 - [Networking](documentation/networking.md)
 - [CI/CD](documentation/cicd-overview.md)
-
-TIME LOG: 74 HOURS
