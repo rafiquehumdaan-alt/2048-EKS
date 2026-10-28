@@ -1,0 +1,16 @@
+extends: default
+
+rules:
+  document-start: disable
+
+  line-length: disable
+
+  truthy: disable
+
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  trailing-spaces: enable
+
+  key-duplicates: enable
