@@ -128,6 +128,10 @@ jobs:
     needs: terraform-checks
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: write
+      id-token: write
+
     defaults:
       run:
         working-directory: terraform
@@ -157,6 +161,44 @@ jobs:
 
       - name: Terraform apply
         run: terraform apply -auto-approve tfplan
+
+      - name: Update AWS Load Balancer Controller VPC ID in Git
+        working-directory: .
+        run: |
+          set -euo pipefail
+
+          VPC_ID=$(terraform -chdir=terraform output -raw vpc_id)
+
+          if [[ ! "$VPC_ID" =~ ^vpc-[0-9a-f]+$ ]]; then
+            echo "Invalid Terraform VPC ID: $VPC_ID"
+            exit 1
+          fi
+
+          FILE="argocd/applications/aws-load-balancer-controller.yaml"
+
+          grep -qE '^[[:space:]]*- name: vpcId$' "$FILE"
+
+          sed -i -E '/^[[:space:]]*- name: vpcId$/{n;s/^([[:space:]]*value: ).*/\1"'"$VPC_ID"'"/;}' "$FILE"
+
+          grep -qF "value: \"$VPC_ID\"" "$FILE"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$FILE"
+
+          if git diff --cached --quiet; then
+            echo "VPC ID already matches Terraform output."
+          else
+            git commit -m "chore: update EKS VPC ID"
+            git push origin HEAD:main
+          fi
+
+          git fetch origin main
+
+          git show "origin/main:$FILE" | grep -qF "value: \"$VPC_ID\""
+
+          echo "VPC ID verified in GitHub: $VPC_ID"
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede  # v4.0.1
@@ -260,32 +302,31 @@ jobs:
           helm repo update
           helm upgrade --install metrics-server metrics-server/metrics-server --namespace kube-system --version 3.14.0 --wait --timeout 5m
 
-      - name: Register AWS Load Balancer Controller Application
+      - name: Register ArgoCD Parent Application
         run: |
-          VPC_ID=$(terraform output -raw vpc_id)
+          set -euo pipefail
 
-          sed "s/__VPC_ID__/$VPC_ID/g" ../argocd/applications/aws-load-balancer-controller.yaml > /tmp/aws-load-balancer-controller.yaml
-          kubectl apply -f /tmp/aws-load-balancer-controller.yaml
+          kubectl apply -f ../argocd/root-app.yaml
 
-      - name: Register cert-manager Application
-        run: |
-          kubectl apply -f ../argocd/applications/cert-manager.yaml
+          kubectl wait \
+            --for=create application/aws-load-balancer-controller \
+            -n argocd \
+            --timeout=300s
+
+          kubectl wait \
+            --for=create application/cert-manager \
+            -n argocd \
+            --timeout=300s
+
+          echo "Parent Application registered."
 
       - name: Wait for cert-manager
         run: |
           kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/cert-manager -n argocd --timeout=600s
 
-      - name: Register cluster-issuer Application
-        run: |
-          kubectl apply -f ../argocd/applications/cluster-issuer.yaml
-
       - name: Wait for AWS Load Balancer Controller
         run: |
           kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/aws-load-balancer-controller -n argocd --timeout=600s
-
-      - name: Register Monitoring Application
-        run: |
-          kubectl apply -f ../argocd/applications/monitoring.yaml
 
       - name: Verify Prometheus Operator
         run: |
@@ -326,14 +367,6 @@ jobs:
 
           echo "Prometheus Operator is ready."
 
-      - name: Register ingress-nginx Application
-        run: |
-          kubectl apply -f ../argocd/applications/ingress-nginx.yaml
-
-      - name: Register ExternalDNS Application
-        run: |
-          kubectl apply -f ../argocd/applications/external-dns.yaml
-
       - name: Verify Platform Controllers
         run: |
           set -euo pipefail
@@ -363,10 +396,6 @@ jobs:
           done
 
           echo "All platform controllers are ready."
-
-      - name: Register 2048 Application
-        run: |
-          kubectl apply -f ../argocd/applications/2048.yaml
 
       - name: Verify ArgoCD Platform Applications
         run: |
@@ -420,6 +449,31 @@ jobs:
           done
 
           echo "All ArgoCD Applications are healthy."
+
+      - name: Verify 2048 Application
+        run: |
+          set -euo pipefail
+
+          kubectl wait \
+            --for=create application/2048 \
+            -n argocd \
+            --timeout=600s
+
+          kubectl wait \
+            --for=jsonpath='{.status.sync.status}'=Synced \
+            application/2048 \
+            -n argocd \
+            --timeout=600s
+
+          kubectl wait \
+            --for=jsonpath='{.status.health.status}'=Healthy \
+            application/2048 \
+            -n argocd \
+            --timeout=600s
+
+          echo "2048 Application is Synced and Healthy."
+
+          echo "2048 Application is Healthy."
 
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
@@ -514,6 +568,59 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Remove ArgoCD Parent Application
+        if: steps.argocd-check.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+
+          if ! kubectl get application root-app -n argocd >/dev/null 2>&1; then
+            echo "Parent Application not found. Continuing cleanup."
+            exit 0
+          fi
+
+          echo "Disabling parent automatic synchronisation..."
+
+          kubectl patch application root-app \
+            -n argocd \
+            --type merge \
+            -p '{"spec":{"syncPolicy":{"automated":null}}}'
+
+          echo "Waiting for any active parent sync to finish..."
+
+          for attempt in {1..60}; do
+            PHASE=$(kubectl get application root-app -n argocd \
+              -o jsonpath='{.status.operationState.phase}')
+
+            if [ "$PHASE" != "Running" ]; then
+              echo "No active parent sync."
+              break
+            fi
+
+            if [ "$attempt" -eq 60 ]; then
+              echo "ERROR: Parent Application sync is still running."
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          echo "Removing parent Application without deleting children..."
+
+          kubectl patch application root-app \
+            -n argocd \
+            --type merge \
+            -p '{"metadata":{"finalizers":null}}'
+
+          kubectl delete application root-app \
+            -n argocd \
+            --cascade=orphan \
+            --wait=true \
+            --timeout=120s
+
+          echo "Parent removed. Child Applications remain for ordered cleanup."
+
+          kubectl get applications -n argocd
 
       - name: Remove Monitoring Application
         if: steps.argocd-check.outputs.exists == 'true'
