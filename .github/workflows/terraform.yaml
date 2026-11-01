@@ -375,7 +375,7 @@ jobs:
             aws-load-balancer-controller \
             cert-manager \
             cluster-issuer \
-            ingress-nginx \
+            traefik \
             external-dns; do
 
             echo "Waiting for $APP..."
@@ -405,7 +405,7 @@ jobs:
             aws-load-balancer-controller
             cert-manager
             cluster-issuer
-            ingress-nginx
+            traefik
             external-dns
             monitoring
           )
@@ -713,18 +713,26 @@ jobs:
           kubectl get challenges,orders,certificates,ingress -n 2048
           exit 1
 
-      - name: Remove ingress-nginx Application
+      - name: Remove Traefik Application
         if: steps.argocd-check.outputs.exists == 'true'
         run: |
-          if kubectl get application ingress-nginx -n argocd >/dev/null 2>&1; then
-            kubectl patch application ingress-nginx -n argocd \
+          set -euo pipefail
+
+          if kubectl get application traefik -n argocd >/dev/null 2>&1; then
+            echo "Removing Traefik Application and its managed resources..."
+
+            kubectl patch application traefik -n argocd \
               --type merge \
               -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
 
-            kubectl delete application ingress-nginx -n argocd --wait=false
+            kubectl delete application traefik -n argocd --wait=false
 
-            kubectl wait --for=delete application/ingress-nginx \
+            kubectl wait --for=delete application/traefik \
               -n argocd --timeout=600s
+
+            echo "Traefik Application removed."
+          else
+            echo "Traefik Application not found."
           fi
 
       - name: Wait for NLB deletion

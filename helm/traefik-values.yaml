@@ -1,0 +1,75 @@
+deployment:
+  replicas: 2
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesGateway:
+    enabled: false
+  kubernetesCRD:
+    enabled: true
+
+ingressClass:
+  enabled: true
+  name: traefik
+  isDefaultClass: false
+
+gateway:
+  enabled: false
+
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+
+    proxyProtocol:
+      trustedIPs:
+        - 10.0.0.0/16
+
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    port: 8443
+    exposedPort: 443
+
+    proxyProtocol:
+      trustedIPs:
+        - 10.0.0.0/16
+
+    http:
+      tls:
+        enabled: true
+
+service:
+  enabled: true
+
+  spec:
+    type: LoadBalancer
+
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "*"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "TCP"
+
+metrics:
+  prometheus:
+    service:
+      enabled: true
+
+    serviceMonitor:
+      enabled: false

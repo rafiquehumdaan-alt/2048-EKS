@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 
 metadata:
-  name: ingress-nginx
+  name: traefik
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
@@ -11,13 +11,13 @@ spec:
   project: default
 
   sources:
-    - repoURL: https://kubernetes.github.io/ingress-nginx
-      chart: ingress-nginx
-      targetRevision: 4.15.1
+    - repoURL: https://traefik.github.io/charts
+      chart: traefik
+      targetRevision: 42.1.3
       helm:
-        releaseName: ingress-nginx
+        releaseName: traefik
         valueFiles:
-          - $values/helm/ingress-nginx-values.yaml
+          - $values/helm/traefik-values.yaml
 
     - repoURL: https://github.com/rafiquehumdaan-alt/2048-EKS.git
       targetRevision: main
@@ -25,7 +25,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: ingress-nginx
+    namespace: traefik
 
   syncPolicy:
     automated:

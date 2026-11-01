@@ -14,6 +14,22 @@ prometheus:
       emptyDir:
         sizeLimit: 5Gi
 
+  additionalServiceMonitors:
+    - name: traefik
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+          app.kubernetes.io/component: metrics
+
+      namespaceSelector:
+        matchNames:
+          - traefik
+
+      endpoints:
+        - port: metrics
+          path: /metrics
+          interval: 30s
+
 prometheusOperator:
   enabled: true
 
@@ -66,13 +82,12 @@ grafana:
 
   ingress:
     enabled: true
-    ingressClassName: nginx
+    ingressClassName: traefik
 
     annotations:
       cert-manager.io/cluster-issuer: "letsencrypt"
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      # nginx.ingress.kubernetes.io/whitelist-source-range: "YOUR_PUBLIC_IP/32"
-      # Uncomment the line above and replace YOUR_PUBLIC_IP with your actual public IP to restrict access to the ingress.
+      # traefik.ingress.kubernetes.io/router.middlewares: "monitoring-grafana-ip-allowlist@kubernetescrd"
+      # Uncomment the line above to enable IP allowlist for Grafana ingress.
 
     hosts:
       - grafana.eks.humdaan.co.uk
