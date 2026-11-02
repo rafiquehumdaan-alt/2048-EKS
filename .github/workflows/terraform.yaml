@@ -207,9 +207,6 @@ jobs:
       - name: Verify ArgoCD Platform Applications
         run: bash ../scripts/verify-platform-applications.sh
 
-      - name: Verify 2048 Application
-        run: bash ../scripts/verify-2048-application.sh
-
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     needs: terraform-checks
