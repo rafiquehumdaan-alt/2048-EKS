@@ -8,6 +8,10 @@ on:
       - "terraform/**"
       - "kubernetes/**"
       - "argocd/**"
+      - "helm/**"
+      - "scripts/**"
+      - ".yamllint"
+      - ".tflint.hcl"
       - ".github/workflows/terraform.yaml"
 
   pull_request:
@@ -17,6 +21,10 @@ on:
       - "terraform/**"
       - "kubernetes/**"
       - "argocd/**"
+      - "helm/**"
+      - "scripts/**"
+      - ".yamllint"
+      - ".tflint.hcl"
       - ".github/workflows/terraform.yaml"
 
   workflow_dispatch:
@@ -33,6 +41,10 @@ on:
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: terraform-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   terraform-checks:
@@ -78,31 +90,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint Terraform configuration
-        run: |
-          set -euo pipefail
+        run: bash ../scripts/terraform-lint.sh
 
-          echo "========== Root configuration =========="
-          tflint
-
-          for dir in modules/*/; do
-            echo "========== Checking $dir =========="
-            tflint --chdir "$dir" --config "$PWD/.tflint.hcl"
-          done
-
-      - name: Install yamllint
+      - name: Install and lint YAML files
         working-directory: .
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y yamllint
-
-      - name: Lint YAML files
-        working-directory: .
-        run: |
-          yamllint -c .yamllint \
-            kubernetes/ \
-            argocd/ \
-            .github/workflows/ \
-            helm/
+        run: bash scripts/yaml-lint.sh
 
       - name: Terraform format
         run: terraform fmt -check -recursive
@@ -164,41 +156,7 @@ jobs:
 
       - name: Update AWS Load Balancer Controller VPC ID in Git
         working-directory: .
-        run: |
-          set -euo pipefail
-
-          VPC_ID=$(terraform -chdir=terraform output -raw vpc_id)
-
-          if [[ ! "$VPC_ID" =~ ^vpc-[0-9a-f]+$ ]]; then
-            echo "Invalid Terraform VPC ID: $VPC_ID"
-            exit 1
-          fi
-
-          FILE="argocd/applications/aws-load-balancer-controller.yaml"
-
-          grep -qE '^[[:space:]]*- name: vpcId$' "$FILE"
-
-          sed -i -E '/^[[:space:]]*- name: vpcId$/{n;s/^([[:space:]]*value: ).*/\1"'"$VPC_ID"'"/;}' "$FILE"
-
-          grep -qF "value: \"$VPC_ID\"" "$FILE"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add "$FILE"
-
-          if git diff --cached --quiet; then
-            echo "VPC ID already matches Terraform output."
-          else
-            git commit -m "chore: update EKS VPC ID"
-            git push origin HEAD:main
-          fi
-
-          git fetch origin main
-
-          git show "origin/main:$FILE" | grep -qF "value: \"$VPC_ID\""
-
-          echo "VPC ID verified in GitHub: $VPC_ID"
+        run: bash scripts/update-vpc-id.sh
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede  # v4.0.1
@@ -208,272 +166,46 @@ jobs:
 
       - name: Configure kubectl
         run: |
-          aws eks update-kubeconfig \
-            --name 2048-eks-cluster \
-            --region eu-west-2
+          aws eks update-kubeconfig --name 2048-eks-cluster --region eu-west-2
 
       - name: Verify EKS access
         run: |
           kubectl get nodes
 
       - name: Create Grafana Kubernetes Secrets
+        working-directory: .
         env:
           GRAFANA_GITHUB_CLIENT_ID: ${{ secrets.GRAFANA_GITHUB_CLIENT_ID }}
           GRAFANA_GITHUB_CLIENT_SECRET: ${{ secrets.GRAFANA_GITHUB_CLIENT_SECRET }}
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: |
-          for name in GRAFANA_GITHUB_CLIENT_ID GRAFANA_GITHUB_CLIENT_SECRET GRAFANA_ADMIN_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "Missing required secret: $name"
-              exit 1
-            fi
-          done
-
-          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-
-
-          python3 - <<'PY' | kubectl apply --server-side --field-manager=grafana-secret-bootstrap -f -
-          import base64
-          import json
-          import os
-
-          def encode(value):
-              return base64.b64encode(value.encode()).decode()
-
-          secrets = [
-              {
-                  "apiVersion": "v1",
-                  "kind": "Secret",
-                  "metadata": {
-                      "name": "grafana-oauth-credentials",
-                      "namespace": "monitoring"
-                  },
-                  "type": "Opaque",
-                  "data": {
-                      "GF_AUTH_GITHUB_CLIENT_ID": encode(os.environ["GRAFANA_GITHUB_CLIENT_ID"]),
-                      "GF_AUTH_GITHUB_CLIENT_SECRET": encode(os.environ["GRAFANA_GITHUB_CLIENT_SECRET"])
-                  }
-              },
-              {
-                  "apiVersion": "v1",
-                  "kind": "Secret",
-                  "metadata": {
-                      "name": "grafana-admin-credentials",
-                      "namespace": "monitoring"
-                  },
-                  "type": "Opaque",
-                  "data": {
-                      "admin-user": encode("admin"),
-                      "admin-password": encode(os.environ["GRAFANA_ADMIN_PASSWORD"])
-                  }
-              }
-          ]
-
-          print(json.dumps({
-              "apiVersion": "v1",
-              "kind": "List",
-              "items": secrets
-          }))
-          PY
-
-      - name: Add ArgoCD Helm repository
-        run: |
-          helm repo add argo https://argoproj.github.io/argo-helm
-          helm repo update
+        run: bash scripts/grafana-secrets.sh
 
       - name: Install ArgoCD
-        run: |
-          helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --values ../argocd/values.yaml --wait --timeout 10m
+        run: bash ../scripts/install-argocd.sh
 
       - name: Verify ArgoCD installation
-        run: |
-          kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=300s
-          kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=300s
-          kubectl rollout status deployment/argocd-server -n argocd --timeout=300s
-          kubectl rollout status deployment/argocd-applicationset-controller -n argocd --timeout=300s
-          echo "ArgoCD pods:"
-          kubectl get pods -n argocd
-          echo "ArgoCD Helm release:"
-          helm list -n argocd
+        run: bash ../scripts/verify-argocd.sh
 
       - name: Install Metrics Server
-        run: |
-          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-          helm repo update
-          helm upgrade --install metrics-server metrics-server/metrics-server --namespace kube-system --version 3.14.0 --wait --timeout 5m
+        run: bash ../scripts/install-metrics-server.sh
 
       - name: Register ArgoCD Parent Application
-        run: |
-          set -euo pipefail
-
-          kubectl apply -f ../argocd/root-app.yaml
-
-          kubectl wait \
-            --for=create application/aws-load-balancer-controller \
-            -n argocd \
-            --timeout=300s
-
-          kubectl wait \
-            --for=create application/cert-manager \
-            -n argocd \
-            --timeout=300s
-
-          echo "Parent Application registered."
+        run: bash ../scripts/register-argocd-parent.sh
 
       - name: Wait for cert-manager
-        run: |
-          kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/cert-manager -n argocd --timeout=600s
+        run: bash ../scripts/wait-for-argocd-app-health.sh cert-manager
 
       - name: Wait for AWS Load Balancer Controller
-        run: |
-          kubectl wait --for=jsonpath='{.status.health.status}'=Healthy application/aws-load-balancer-controller -n argocd --timeout=600s
+        run: bash ../scripts/wait-for-argocd-app-health.sh aws-load-balancer-controller
 
       - name: Verify Prometheus Operator
-        run: |
-          set -euo pipefail
-
-          echo "Waiting for Prometheus CRDs to be established..."
-
-          for CRD in prometheuses.monitoring.coreos.com alertmanagers.monitoring.coreos.com servicemonitors.monitoring.coreos.com podmonitors.monitoring.coreos.com; do
-            kubectl wait --for=create crd/"$CRD" --timeout=600s
-
-            echo "Waiting for $CRD to become Established..."
-
-            for attempt in {1..60}; do
-              STATUS=$(kubectl get crd "$CRD" \
-                -o jsonpath='{.status.conditions[?(@.type=="Established")].status}' 2>/dev/null || true)
-
-              if [ "$STATUS" = "True" ]; then
-                echo "$CRD is Established."
-                break
-              fi
-
-              if [ "$attempt" -eq 60 ]; then
-                echo "ERROR: $CRD did not become Established."
-                exit 1
-              fi
-
-              sleep 5
-            done
-          done
-
-          echo "Waiting for Prometheus Operator deployment..."
-          kubectl wait --for=create deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=600s
-          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
-
-          echo "Restarting Prometheus Operator after CRDs are established..."
-          kubectl rollout restart deployment/monitoring-kube-prometheus-operator -n monitoring
-          kubectl rollout status deployment/monitoring-kube-prometheus-operator -n monitoring --timeout=300s
-
-          echo "Prometheus Operator is ready."
-
-      - name: Verify Platform Controllers
-        run: |
-          set -euo pipefail
-
-          for APP in \
-            aws-load-balancer-controller \
-            cert-manager \
-            cluster-issuer \
-            traefik \
-            external-dns; do
-
-            echo "Waiting for $APP..."
-
-            kubectl wait \
-              --for=jsonpath='{.status.sync.status}'=Synced \
-              "application/$APP" \
-              -n argocd \
-              --timeout=600s
-
-            kubectl wait \
-              --for=jsonpath='{.status.health.status}'=Healthy \
-              "application/$APP" \
-              -n argocd \
-              --timeout=600s
-
-            echo "$APP is ready."
-          done
-
-          echo "All platform controllers are ready."
+        run: bash ../scripts/verify-prometheus-operator.sh
 
       - name: Verify ArgoCD Platform Applications
-        run: |
-          set -euo pipefail
-
-          APPS=(
-            aws-load-balancer-controller
-            cert-manager
-            cluster-issuer
-            traefik
-            external-dns
-            monitoring
-          )
-
-          for APP in "${APPS[@]}"; do
-            echo "========== Checking $APP =========="
-
-            if ! kubectl wait \
-              --for=jsonpath='{.status.sync.status}'=Synced \
-              "application/$APP" \
-              -n argocd \
-              --timeout=600s; then
-
-              echo "::error::$APP failed to become Synced."
-              kubectl describe application "$APP" -n argocd || true
-              exit 1
-            fi
-
-            if ! kubectl wait \
-              --for=jsonpath='{.status.health.status}'=Healthy \
-              "application/$APP" \
-              -n argocd \
-              --timeout=600s; then
-
-              echo "::error::$APP failed to become Healthy."
-
-              kubectl describe application "$APP" -n argocd || true
-
-              echo "Application resources:"
-              kubectl get pods,deployments,statefulsets,services \
-                -n monitoring || true
-
-              echo "Recent Kubernetes events:"
-              kubectl get events -A \
-                --sort-by=.lastTimestamp | tail -40 || true
-
-              exit 1
-            fi
-
-            echo "$APP is Synced and Healthy."
-          done
-
-          echo "All ArgoCD Applications are healthy."
+        run: bash ../scripts/verify-platform-applications.sh
 
       - name: Verify 2048 Application
-        run: |
-          set -euo pipefail
-
-          kubectl wait \
-            --for=create application/2048 \
-            -n argocd \
-            --timeout=600s
-
-          kubectl wait \
-            --for=jsonpath='{.status.sync.status}'=Synced \
-            application/2048 \
-            -n argocd \
-            --timeout=600s
-
-          kubectl wait \
-            --for=jsonpath='{.status.health.status}'=Healthy \
-            application/2048 \
-            -n argocd \
-            --timeout=600s
-
-          echo "2048 Application is Synced and Healthy."
-
-          echo "2048 Application is Healthy."
+        run: bash ../scripts/verify-2048-application.sh
 
   terraform-destroy:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
@@ -512,501 +244,78 @@ jobs:
 
       - name: Check if EKS cluster exists
         id: eks-check
-        run: |
-          if aws eks describe-cluster \
-            --name 2048-eks-cluster \
-            --region eu-west-2 >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "EKS cluster exists."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "EKS cluster does not exist. Skipping Kubernetes cleanup."
-          fi
+        run: bash ../scripts/check-eks-exists.sh
 
       - name: Configure kubectl
         if: steps.eks-check.outputs.exists == 'true'
         run: |
-          aws eks update-kubeconfig \
-            --name 2048-eks-cluster \
-            --region eu-west-2
+          aws eks update-kubeconfig --name 2048-eks-cluster --region eu-west-2
 
       - name: Ensure GitHub Actions EKS access
         if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          if ! aws eks describe-access-entry \
-            --cluster-name 2048-eks-cluster \
-            --principal-arn "${{ vars.AWS_ROLE_ARN }}" \
-            --region eu-west-2 >/dev/null 2>&1; then
-
-            echo "GitHub Actions EKS access entry is missing. Recreating it..."
-
-            aws eks create-access-entry \
-              --cluster-name 2048-eks-cluster \
-              --principal-arn "${{ vars.AWS_ROLE_ARN }}" \
-              --type STANDARD \
-              --region eu-west-2
-
-            aws eks associate-access-policy \
-              --cluster-name 2048-eks-cluster \
-              --principal-arn "${{ vars.AWS_ROLE_ARN }}" \
-              --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
-              --access-scope type=cluster \
-              --region eu-west-2
-
-            echo "Waiting for EKS access to propagate..."
-            sleep 15
-          else
-            echo "GitHub Actions EKS access already exists."
-          fi
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: bash ../scripts/ensure-eks-access.sh
 
       - name: Check if ArgoCD is installed
         id: argocd-check
         if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          if kubectl get crd applications.argoproj.io >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash ../scripts/check-argocd-exists.sh
 
       - name: Remove ArgoCD Parent Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          set -euo pipefail
-
-          if ! kubectl get application root-app -n argocd >/dev/null 2>&1; then
-            echo "Parent Application not found. Continuing cleanup."
-            exit 0
-          fi
-
-          echo "Disabling parent automatic synchronisation..."
-
-          kubectl patch application root-app \
-            -n argocd \
-            --type merge \
-            -p '{"spec":{"syncPolicy":{"automated":null}}}'
-
-          echo "Waiting for any active parent sync to finish..."
-
-          for attempt in {1..60}; do
-            PHASE=$(kubectl get application root-app -n argocd \
-              -o jsonpath='{.status.operationState.phase}')
-
-            if [ "$PHASE" != "Running" ]; then
-              echo "No active parent sync."
-              break
-            fi
-
-            if [ "$attempt" -eq 60 ]; then
-              echo "ERROR: Parent Application sync is still running."
-              exit 1
-            fi
-
-            sleep 5
-          done
-
-          echo "Removing parent Application without deleting children..."
-
-          kubectl patch application root-app \
-            -n argocd \
-            --type merge \
-            -p '{"metadata":{"finalizers":null}}'
-
-          kubectl delete application root-app \
-            -n argocd \
-            --cascade=orphan \
-            --wait=true \
-            --timeout=120s
-
-          echo "Parent removed. Child Applications remain for ordered cleanup."
-
-          kubectl get applications -n argocd
+        run: bash ../scripts/remove-argocd-parent.sh
 
       - name: Remove Monitoring Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          if kubectl get application monitoring -n argocd >/dev/null 2>&1; then
-            kubectl patch application monitoring -n argocd \
-              --type merge \
-              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-
-            kubectl delete application monitoring -n argocd --wait=false
-
-            kubectl wait --for=delete application/monitoring \
-              -n argocd --timeout=600s
-          fi
+        run: bash ../scripts/remove-monitoring.sh
 
       - name: Verify Grafana EBS Volume Cleanup
         if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          set -euo pipefail
-
-          echo "Checking Grafana PVC..."
-
-          if kubectl get pvc monitoring-grafana -n monitoring >/dev/null 2>&1; then
-            kubectl wait --for=delete \
-              pvc/monitoring-grafana \
-              -n monitoring \
-              --timeout=300s
-          fi
-
-          echo "Checking for remaining Grafana EBS volumes..."
-
-          for attempt in {1..30}; do
-            VOLUME_IDS=$(aws ec2 describe-volumes \
-              --region eu-west-2 \
-              --filters \
-                "Name=tag:kubernetes.io/created-for/pvc/name,Values=monitoring-grafana" \
-              --query 'Volumes[].VolumeId' \
-              --output text)
-
-            if [ -z "$VOLUME_IDS" ]; then
-              echo "Grafana EBS volume cleanup confirmed."
-              exit 0
-            fi
-
-            echo "Waiting for Grafana EBS volumes to be deleted: $VOLUME_IDS"
-            sleep 10
-          done
-
-          echo "ERROR: Grafana EBS volume still exists."
-          exit 1
+        run: bash ../scripts/verify-grafana-ebs-cleanup.sh
 
       - name: Remove 2048 Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          if kubectl get application 2048 -n argocd >/dev/null 2>&1; then
-            kubectl patch application 2048 -n argocd --type merge -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-            kubectl delete application 2048 -n argocd --wait=false
-          fi
-
-          for attempt in {1..60}; do
-            APP=$(kubectl get application 2048 -n argocd --ignore-not-found -o name) || {
-            echo "Failed to connect to Kubernetes API"
-            exit 1
-            }
-
-            if [ -z "$APP" ]; then
-              echo "Application 2048 deleted."
-              exit 0
-            fi
-
-            STUCK_CHALLENGES=$(kubectl get challenges -n 2048 -o json | jq -r '
-              .items[]
-              | select(.metadata.deletionTimestamp != null)
-              | select((.status.reason // "") | contains("NoSuchHostedZone"))
-              | .metadata.name
-            ')
-
-            for CHALLENGE in $STUCK_CHALLENGES; do
-              echo "Removing obsolete finalizer from $CHALLENGE"
-
-              kubectl patch challenge "$CHALLENGE" -n 2048 \
-                --type=merge \
-                -p '{"metadata":{"finalizers":[]}}'
-            done
-
-            sleep 10
-          done
-
-          echo "2048 Application deletion timed out."
-          kubectl get challenges,orders,certificates,ingress -n 2048
-          exit 1
+        run: bash ../scripts/remove-2048-application.sh
 
       - name: Remove Traefik Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          set -euo pipefail
-
-          if kubectl get application traefik -n argocd >/dev/null 2>&1; then
-            echo "Removing Traefik Application and its managed resources..."
-
-            kubectl patch application traefik -n argocd \
-              --type merge \
-              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-
-            kubectl delete application traefik -n argocd --wait=false
-
-            kubectl wait --for=delete application/traefik \
-              -n argocd --timeout=600s
-
-            echo "Traefik Application removed."
-          else
-            echo "Traefik Application not found."
-          fi
+        run: bash ../scripts/remove-traefik.sh
 
       - name: Wait for NLB deletion
         if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          VPC_ID=$(terraform output -raw vpc_id)
-
-          for attempt in {1..20}; do
-            NLB_COUNT=$(aws elbv2 describe-load-balancers \
-              --region eu-west-2 \
-              --query "length(LoadBalancers[?Type=='network' && VpcId=='$VPC_ID'])" \
-              --output text)
-
-            if [ "$NLB_COUNT" -eq 0 ]; then
-              echo "All NLBs in the VPC have been deleted."
-              exit 0
-            fi
-
-            echo "Waiting for $NLB_COUNT NLB(s) to be deleted..."
-            sleep 15
-          done
-
-          echo "NLB deletion timed out."
-          exit 1
+        run: bash ../scripts/wait-for-nlb-deletion.sh
 
       - name: Remove ExternalDNS Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          if kubectl get application external-dns -n argocd >/dev/null 2>&1; then
-            kubectl patch application external-dns -n argocd \
-              --type merge \
-              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-
-            kubectl delete application external-dns -n argocd --wait=false
-
-            kubectl wait --for=delete application/external-dns \
-              -n argocd --timeout=300s
-          fi
+        run: bash ../scripts/remove-argocd-application.sh external-dns
 
       - name: Remove ClusterIssuer Application
         if: steps.argocd-check.outputs.exists == 'true'
-        run: |
-          if kubectl get application cluster-issuer -n argocd >/dev/null 2>&1; then
-            kubectl patch application cluster-issuer -n argocd \
-              --type merge \
-              -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
-
-            kubectl delete application cluster-issuer -n argocd --wait=false
-
-            kubectl wait --for=delete application/cluster-issuer \
-              -n argocd --timeout=300s
-          fi
+        run: bash ../scripts/remove-argocd-application.sh cluster-issuer
 
       - name: Remove AWS Load Balancer Controller and cert-manager
         if: steps.argocd-check.outputs.exists == 'true'
         run: |
-          for APP in aws-load-balancer-controller cert-manager; do
-            if kubectl get application "$APP" -n argocd >/dev/null 2>&1; then
-              kubectl patch application "$APP" -n argocd \
-                --type merge \
-                -p '{"metadata":{"finalizers":["resources-finalizer.argocd.argoproj.io"]}}'
+          set -e
+          bash ../scripts/remove-argocd-application.sh aws-load-balancer-controller
+          bash ../scripts/remove-argocd-application.sh cert-manager
 
-              kubectl delete application "$APP" -n argocd --wait=false
-
-              kubectl wait --for=delete application/"$APP" \
-                -n argocd --timeout=300s
-            fi
-          done
-
-      - name: Remove ArgoCD Helm release
+      - name: Remove ArgoCD
         if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          helm uninstall argocd \
-            -n argocd \
-            --ignore-not-found \
-            --wait \
-            --timeout 300s
-
-      - name: Remove ArgoCD namespace
-        if: steps.eks-check.outputs.exists == 'true'
-        run: |
-          kubectl delete namespace argocd --ignore-not-found=true --wait=true --timeout=300s
+        run: bash ../scripts/remove-argocd.sh
 
       - name: Remove leftover Kubernetes security groups
-        run: |
-          VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || true)
-
-          if [ -z "$VPC_ID" ]; then
-            echo "Terraform VPC output unavailable. Trying EKS cluster..."
-
-            VPC_ID=$(aws eks describe-cluster \
-              --name 2048-eks-cluster \
-              --region eu-west-2 \
-              --query "cluster.resourcesVpcConfig.vpcId" \
-              --output text 2>/dev/null || true)
-          fi
-
-          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
-            echo "Could not determine VPC ID. Skipping Kubernetes security group cleanup."
-            exit 0
-          fi
-
-          echo "Using VPC: $VPC_ID"
-
-          for attempt in {1..10}; do
-            SG_IDS=$(aws ec2 describe-security-groups \
-              --filters \
-                "Name=vpc-id,Values=$VPC_ID" \
-                "Name=group-name,Values=k8s-*" \
-              --query "SecurityGroups[*].GroupId" \
-              --output text)
-
-            if [ -z "$SG_IDS" ]; then
-              echo "No leftover Kubernetes security groups found."
-              exit 0
-            fi
-
-            echo "Found Kubernetes security groups: $SG_IDS"
-
-            for SG_ID in $SG_IDS; do
-              ENI_COUNT=$(aws ec2 describe-network-interfaces \
-                --filters "Name=group-id,Values=$SG_ID" \
-                --query "length(NetworkInterfaces)" \
-                --output text)
-
-              if [ "$ENI_COUNT" -eq 0 ]; then
-                echo "Deleting security group: $SG_ID"
-                aws ec2 delete-security-group \
-                  --group-id "$SG_ID" || true
-              else
-                echo "$SG_ID is still attached to $ENI_COUNT network interface(s)."
-              fi
-            done
-
-            echo "Waiting 30 seconds before checking again..."
-            sleep 30
-          done
-
-          echo "Some Kubernetes security groups still remain after waiting."
-          exit 1
+        run: bash ../scripts/cleanup-security-groups.sh
 
       - name: Remove leftover Route 53 records
-        run: |
-          set -euo pipefail
-
-          ZONE_ID=$(terraform output -raw eks_route53_zone_id 2>/dev/null || true)
-
-          if [ -z "$ZONE_ID" ]; then
-            echo "No Route 53 zone in Terraform state. Skipping."
-            exit 0
-          fi
-
-          echo "Cleaning Route 53 hosted zone: $ZONE_ID"
-
-          aws route53 list-resource-record-sets \
-            --hosted-zone-id "$ZONE_ID" \
-            --output json |
-            jq '{
-              Changes: [
-                .ResourceRecordSets[]
-                | select(
-                    (.Type != "NS" and .Type != "SOA")
-                    and
-                    (
-                      .Name == "eks.humdaan.co.uk."
-                      or (.Name | endswith(".eks.humdaan.co.uk."))
-                    )
-                  )
-                | {
-                    Action: "DELETE",
-                    ResourceRecordSet: .
-                  }
-              ]
-            }' > /tmp/2048-dns-cleanup.json
-
-          COUNT=$(jq '.Changes | length' /tmp/2048-dns-cleanup.json)
-
-          echo "Found $COUNT DNS records to delete."
-
-          if [ "$COUNT" -gt 0 ]; then
-            CHANGE_ID=$(aws route53 change-resource-record-sets \
-              --hosted-zone-id "$ZONE_ID" \
-              --change-batch file:///tmp/2048-dns-cleanup.json \
-              --query ChangeInfo.Id \
-              --output text)
-
-            aws route53 wait resource-record-sets-changed \
-              --id "$CHANGE_ID"
-
-            echo "DNS records deleted successfully."
-          else
-            echo "No leftover DNS records found."
-          fi
-
-          echo "Route 53 cleanup complete."
+        run: bash ../scripts/cleanup-route53.sh
 
       - name: Terraform plan for destroy
         run: terraform plan -destroy -out=destroy.tfplan
 
       - name: Terraform destroy
-        run: |
-          if terraform apply -auto-approve destroy.tfplan; then
-            exit 0
-          fi
-
-          echo "Initial destroy failed. Checking for orphaned Kubernetes ENIs..."
-
-          # Do not clean up ENIs while managed node groups still exist.
-          if aws eks describe-cluster \
-            --name 2048-eks-cluster --region eu-west-2 \
-            >/dev/null 2>&1; then
-
-            NODEGROUPS=$(aws eks list-nodegroups \
-              --cluster-name 2048-eks-cluster \
-              --region eu-west-2 \
-              --query 'length(nodegroups)' --output text)
-
-            if [ "$NODEGROUPS" -ne 0 ]; then
-              echo "Node groups still exist. Refusing ENI cleanup."
-              exit 1
-            fi
-          fi
-
-          VPC_ID=$(terraform output -raw vpc_id 2>/dev/null || true)
-
-          if [ -n "$VPC_ID" ]; then
-            aws ec2 describe-network-interfaces \
-              --region eu-west-2 \
-              --filters "Name=vpc-id,Values=$VPC_ID" \
-              --output json |
-              jq -r '.NetworkInterfaces[]
-                | select(
-                    .Status == "available" and
-                    .RequesterManaged == false and
-                    .Attachment == null and
-                    (.Description | startswith("aws-K8S-"))
-                  )
-                | .NetworkInterfaceId' > /tmp/orphaned-enis.txt
-
-            while read -r ENI_ID; do
-              [ -z "$ENI_ID" ] && continue
-              echo "Deleting orphaned ENI: $ENI_ID"
-              aws ec2 delete-network-interface \
-                --region eu-west-2 \
-                --network-interface-id "$ENI_ID"
-            done < /tmp/orphaned-enis.txt
-          fi
-
-          echo "Retrying Terraform destroy..."
-          terraform plan -destroy -out=retry-destroy.tfplan
-          terraform apply -auto-approve retry-destroy.tfplan
+        run: bash ../scripts/terraform-destroy.sh
 
       - name: Remove leftover EKS CloudWatch Logs
-        run: |
-          set -euo pipefail
-
-          LOG_GROUP="/aws/eks/2048-eks-cluster/cluster"
-
-          echo "Checking CloudWatch log group: $LOG_GROUP"
-
-          LOG_GROUPS=$(aws logs describe-log-groups \
-            --region eu-west-2 \
-            --log-group-name-prefix "$LOG_GROUP" \
-            --query "logGroups[?logGroupName=='$LOG_GROUP'].logGroupName" \
-            --output text)
-
-          if [ "$LOG_GROUPS" = "$LOG_GROUP" ]; then
-            echo "Deleting leftover EKS log group..."
-
-            aws logs delete-log-group \
-              --region eu-west-2 \
-              --log-group-name "$LOG_GROUP"
-
-            echo "CloudWatch log group deleted."
-          else
-            echo "No leftover EKS log group found."
-          fi
+        run: bash ../scripts/cleanup-cloudwatch-logs.sh

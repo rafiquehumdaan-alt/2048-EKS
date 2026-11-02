@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "app/**"
+      - "scripts/push-image-to-ecr.sh"
+      - "scripts/update-app-image.sh"
+      - "scripts/verify-app-deployment.sh"
       - ".github/workflows/application.yaml"
 
   pull_request:
@@ -13,6 +16,9 @@ on:
       - main
     paths:
       - "app/**"
+      - "scripts/push-image-to-ecr.sh"
+      - "scripts/update-app-image.sh"
+      - "scripts/verify-app-deployment.sh"
       - ".github/workflows/application.yaml"
 
   workflow_dispatch:
@@ -60,26 +66,15 @@ jobs:
 
       - name: Push Docker image to ECR
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
-        run: |
-          docker tag 2048:latest ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
-          docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: bash scripts/push-image-to-ecr.sh
 
-      - name: Update Kubernetes image tag
+      - name: Update and commit Kubernetes image
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
-        run: |
-          sed -i \
-            's|${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:[^"]*|${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}|' \
-            kubernetes/deployment.yaml
-
-      - name: Commit Kubernetes image update
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add kubernetes/deployment.yaml
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update 2048 image to ${{ github.sha }}"
-          git push
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: bash scripts/update-app-image.sh
 
       - name: Set up kubectl
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
@@ -88,46 +83,10 @@ jobs:
       - name: Configure kubectl
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
         run: |
-          aws eks update-kubeconfig \
-            --name 2048-eks-cluster \
-            --region eu-west-2
+          aws eks update-kubeconfig --name 2048-eks-cluster --region eu-west-2
 
       - name: Verify 2048 deployment
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy image')
-        run: |
-          set -euo pipefail
-
-          EXPECTED_IMAGE="${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/2048-eks-repo:${{ github.sha }}"
-
-          echo "Waiting for ArgoCD to deploy $EXPECTED_IMAGE"
-
-          for attempt in {1..60}; do
-            CURRENT_IMAGE=$(kubectl get deployment 2048-deployment \
-              -n 2048 \
-              -o jsonpath='{.spec.template.spec.containers[0].image}')
-
-            if [ "$CURRENT_IMAGE" = "$EXPECTED_IMAGE" ]; then
-              echo "Expected image detected."
-              break
-            fi
-
-            if [ "$attempt" -eq 60 ]; then
-              echo "Timed out waiting for the updated image."
-              exit 1
-            fi
-
-            sleep 10
-          done
-
-          kubectl rollout status deployment/2048-deployment \
-            -n 2048 --timeout=300s
-
-          kubectl wait \
-            --for=jsonpath='{.status.sync.status}'=Synced \
-            application/2048 -n argocd --timeout=300s
-
-          kubectl wait \
-            --for=jsonpath='{.status.health.status}'=Healthy \
-            application/2048 -n argocd --timeout=300s
-
-          echo "2048 deployment successful."
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: bash scripts/verify-app-deployment.sh
