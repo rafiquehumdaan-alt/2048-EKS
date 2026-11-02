@@ -172,6 +172,9 @@ jobs:
         run: |
           kubectl get nodes
 
+      - name: Configure gp3 StorageClass
+        run: kubectl apply -f ../kubernetes/storageclass-gp3.yaml
+
       - name: Create Grafana Kubernetes Secrets
         working-directory: .
         env:
