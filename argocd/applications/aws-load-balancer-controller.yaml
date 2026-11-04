@@ -20,7 +20,7 @@ spec:
           - $values/helm/aws-load-balancer-controller-values.yaml
         parameters:
           - name: vpcId
-            value: "vpc-0e6c6b93e81a8e0c8"
+            value: "vpc-04e50a0a73f57c30e"
 
     - repoURL: https://github.com/rafiquehumdaan-alt/2048-EKS.git
       targetRevision: main
