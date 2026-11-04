@@ -41,6 +41,8 @@ module "eks" {
   github_actions_role_arn = "arn:aws:iam::435059220418:role/2048-eks-github-actions-role"
 
   depends_on = [module.iam]
+
+  availability_zones = var.availability_zones
 }
 
 module "vpc_endpoints" {

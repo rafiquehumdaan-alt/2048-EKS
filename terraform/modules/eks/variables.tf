@@ -49,5 +49,11 @@ variable "vpc_id" {
 }
 
 variable "github_actions_role_arn" {
-  type = string
+  description = "IAM role ARN for GitHub Actions to access the EKS cluster"
+  type        = string
+}
+
+variable "availability_zones" {
+  description = "Availability Zones for the managed node groups"
+  type        = list(string)
 }

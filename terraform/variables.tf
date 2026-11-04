@@ -58,24 +58,6 @@ variable "eks_node_instance_type" {
   default     = "c7i-flex.large"
 }
 
-variable "eks_node_min_size" {
-  description = "Minimum size of the EKS managed node group"
-  type        = number
-  default     = 2
-}
-
-variable "eks_node_desired_size" {
-  description = "Desired size of the EKS managed node group"
-  type        = number
-  default     = 2
-}
-
-variable "eks_node_max_size" {
-  description = "Maximum size of the EKS managed node group"
-  type        = number
-  default     = 4
-}
-
 variable "aws_admin_principal_arn" {
   description = "AWS EKS access entry for the cluster"
   type        = string
@@ -91,4 +73,22 @@ variable "eks_subdomain" {
   description = "Subdomain delegated to route 53 for the eks application"
   type        = string
   default     = "eks.humdaan.co.uk"
+}
+
+variable "eks_node_min_size" {
+  description = "Minimum number of nodes per Availability Zone"
+  type        = number
+  default     = 1
+}
+
+variable "eks_node_desired_size" {
+  description = "Desired number of nodes per Availability Zone"
+  type        = number
+  default     = 1
+}
+
+variable "eks_node_max_size" {
+  description = "Maximum number of nodes per Availability Zone"
+  type        = number
+  default     = 2
 }

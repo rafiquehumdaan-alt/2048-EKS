@@ -24,11 +24,18 @@ resource "aws_eks_cluster" "main_cluster" {
   ]
 }
 
+
 resource "aws_eks_node_group" "main_node_group" {
+  for_each = {
+    for index, az in var.availability_zones :
+    az => var.private_subnet_ids[index]
+  }
+
   cluster_name    = aws_eks_cluster.main_cluster.name
-  node_group_name = "${var.cluster_name}-node-group"
+  node_group_name = "${var.cluster_name}-${each.key}"
   node_role_arn   = var.node_role_arn
-  subnet_ids      = var.private_subnet_ids
+
+  subnet_ids = [each.value]
 
   launch_template {
     id      = aws_launch_template.eks_nodes.id
@@ -37,13 +44,14 @@ resource "aws_eks_node_group" "main_node_group" {
 
   scaling_config {
     desired_size = var.node_desired_size
-    max_size     = var.node_max_size
     min_size     = var.node_min_size
+    max_size     = var.node_max_size
   }
 
   instance_types = [var.node_instance_type]
   capacity_type  = "ON_DEMAND"
 }
+
 
 resource "aws_eks_access_entry" "admin_access" {
   cluster_name  = aws_eks_cluster.main_cluster.name
