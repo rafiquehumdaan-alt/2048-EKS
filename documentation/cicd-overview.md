@@ -10,14 +10,14 @@ The Terraform workflow validates the infrastructure configuration and provides m
 
 | Stage | What it does |
 |---|---|
-| Checks | Runs Checkov, Terraform formatting and validation |
+| Checks | Runs Checkov, TFLint, YAML linting, Terraform formatting and validation |
 | Plan | Reviews proposed infrastructure changes |
 | Apply | Creates or updates AWS resources using Terraform |
-| Platform bootstrap | Installs ArgoCD and registers the Kubernetes platform components |
+| Platform bootstrap | Installs ArgoCD and registers the Kubernetes platform components using an App-of-Apps setup |
 | Verification | Waits for the relevant controllers and monitoring components to become healthy |
-| Destroy | Removes ArgoCD-managed resources before tearing down AWS infrastructure |
+| Destroy | Removes ArgoCD-managed resources, Traefik and its NLB before tearing down AWS infrastructure |
 
-The workflow stores its Terraform state in an encrypted, versioned S3 bucket with locking enabled. GitHub Actions accesses AWS using OIDC rather than stored access keys.
+The workflow stores its Terraform state in an encrypted, versioned S3 bucket with locking enabled. GitHub Actions accesses AWS using OIDC rather than stored access keys. The separate Terraform backend and AWS authentication bootstrap must be prepared before running Apply.
 
 ### Infrastructure workflow results
 
@@ -45,7 +45,7 @@ It supports a manual scan-only action as well as deployment.
 
 ## ArgoCD and GitOps
 
-ArgoCD watches the Git repository as the source of truth for the application manifests and platform configuration. When the application pipeline commits a new image tag, ArgoCD detects the change and applies it to EKS.
+ArgoCD watches the Git repository as the source of truth for the application manifests and platform configuration. A root Application manages the platform Applications through an App-of-Apps setup. When the application pipeline commits a new image tag, ArgoCD detects the change and applies it to EKS.
 
 This keeps image building and image deployment separate. The pipeline publishes the image and updates Git, while ArgoCD brings the cluster into line with that version. Automatic sync, pruning and self-healing are enabled for the 2048 application.
 
@@ -53,7 +53,7 @@ This keeps image building and image deployment separate. The pipeline publishes 
 
 ## Deployment and teardown
 
-The workflows were tested with successful infrastructure apply and destroy runs, and the application pipeline was also tested successfully. The destroy workflow includes cleanup for Kubernetes-managed load balancers, Grafana storage and related resources before Terraform removes the infrastructure.
+The workflows were tested with successful infrastructure apply and destroy runs, and the application pipeline was also tested successfully. The destroy workflow includes cleanup for Kubernetes-managed load balancers, including the Traefik NLB, Grafana storage and related resources before Terraform removes the infrastructure.
 
 The separation between the two pipelines means the cluster can stay in place while application versions change. It also allows the AWS environment to be destroyed between study sessions to control costs.
 

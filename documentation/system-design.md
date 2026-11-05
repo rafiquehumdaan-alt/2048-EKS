@@ -6,25 +6,27 @@ The infrastructure runs in the AWS London region (eu-west-2), across two Availab
 
 ## AWS Infrastructure
 
-[![AWS Infrastructure Diagram](Screenshots/2048-infrastructure.png)](Screenshots/2048-infrastructure.png)
+[![AWS and Kubernetes Infrastructure Diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
+
+[Open the editable draw.io architecture diagram](architecture/version%203.drawio)
 
 The application is accessible at https://eks.humdaan.co.uk when the environment is running.
 
-Cloudflare delegates the application's DNS zone to Amazon Route 53. Incoming traffic reaches an AWS Network Load Balancer, which forwards requests to the NGINX Ingress Controller inside EKS. NGINX then routes traffic to the application through a Kubernetes Service.
+Cloudflare delegates the application's DNS zone to Amazon Route 53. Incoming traffic reaches an AWS Network Load Balancer, which forwards requests to Traefik inside EKS. Traefik then routes traffic to the application through a Kubernetes Service.
 
 HTTPS certificates are managed automatically by cert-manager using Let's Encrypt.
 
 ## Kubernetes Architecture
 
-[![Kubernetes Architecture Diagram](Screenshots/kubernetes-infrastructure.png)](Screenshots/kubernetes-infrastructure.png)
+The architecture diagram above also shows the Kubernetes workloads and their placement across the two Availability Zones.
 
-Inside the cluster, the 2048 application runs as a Kubernetes Deployment with two replicas, exposed internally through a ClusterIP Service.
+Inside the cluster, the 2048 application runs as a Kubernetes Deployment with two replicas, exposed internally through a ClusterIP Service. Its replicas are spread across the two Availability Zones.
 
 Several other components are deployed to support the application:
 
 - ArgoCD manages deployments and keeps Kubernetes resources in sync with Git.
 - Helm is used to install and configure the platform components.
-- NGINX Ingress routes incoming requests to the appropriate Kubernetes services.
+- Traefik routes incoming requests to the appropriate Kubernetes services.
 - cert-manager manages TLS certificates and their renewal.
 - ExternalDNS manages DNS records in Amazon Route 53.
 - Prometheus collects metrics from Kubernetes and its workloads.
@@ -78,20 +80,21 @@ These endpoints reduce reliance on NAT Gateways when communicating with supporte
 
 Amazon EKS provides the managed Kubernetes control plane, removing the need to maintain the control-plane servers ourselves.
 
-The cluster uses a managed node group spread across two private subnets.
+The cluster uses two managed node groups, one in each Availability Zone. Each group uses a private subnet in its own zone.
 
 | Configuration | Value |
 |---|---|
 | Cluster Name | 2048-eks-cluster |
 | Instance Type | c7i-flex.large |
-| Desired Nodes | 2 |
-| Minimum Nodes | 2 |
-| Maximum Nodes | 4 |
+| Managed Node Groups | 2, one per Availability Zone |
+| Desired Nodes | 1 per group, 2 total |
+| Minimum Nodes | 1 per group, 2 total |
+| Maximum Nodes | 2 per group, 4 total |
 | Capacity Type | On-Demand |
 
 The EC2 worker nodes provide the compute resources for the application and supporting Kubernetes components.
 
-Managed node groups simplify the provisioning and maintenance of these nodes, while the scaling configuration allows the group to operate between two and four nodes when its desired capacity is adjusted.
+Managed node groups simplify the provisioning and maintenance of these nodes. Each group has its own scaling configuration, allowing between one and two nodes in its Availability Zone when desired capacity is adjusted.
 
 ## Amazon ECR
 
@@ -120,7 +123,7 @@ Several AWS services are used for storing application images, infrastructure sta
 | Amazon S3 | Stores Terraform state |
 | Amazon ECR | Stores container images |
 
-Grafana uses a 5 GiB EBS-backed persistent volume, allowing its stored data to survive Pod restarts and rescheduling.
+Grafana uses a 5 GiB EBS-backed persistent volume, allowing its stored data to survive Pod restarts and rescheduling when compatible storage placement is available.
 
 Prometheus uses temporary storage with a seven-day retention setting. Its stored metrics are not persistent and will be lost when the relevant storage is removed.
 
@@ -130,6 +133,7 @@ A few considerations influenced how the infrastructure was built:
 
 - Private subnets keep the EKS worker nodes away from direct public internet exposure.
 - Using two Availability Zones reduces dependence on a single zone.
+- Separate managed node groups provide a minimum of one worker node in each zone.
 - Managed AWS services reduce the amount of infrastructure that needs to be maintained manually.
 - Terraform allows the environment to be recreated consistently.
 - VPC endpoints provide private connectivity to frequently used AWS services.
@@ -149,14 +153,15 @@ The 2048 application runs in the 2048 namespace. Its main resources are:
 
 | Resource | Purpose |
 |---|---|
-| Deployment | Runs two copies of the web application |
+| Deployment | Runs two copies of the web application, spread across Availability Zones |
 | ClusterIP Service | Gives the Pods a stable internal endpoint on port 80 |
-| Ingress | Routes requests for eks.humdaan.co.uk to the Service |
+| Ingress | Routes requests for eks.humdaan.co.uk to the Service through Traefik |
 | TLS certificate | Enables HTTPS for the application hostname |
+| Horizontal Pod Autoscaler | Scales application replicas between two and four based on CPU utilisation |
 
 The Deployment has startup, readiness and liveness probes. These help Kubernetes decide when a container is ready to receive traffic and when it should be restarted. CPU and memory requests and limits are also defined so the scheduler has a clearer picture of the application's resource needs.
 
-Two replicas provide some redundancy if a Pod fails.
+Two replicas provide some redundancy if a Pod fails. Topology spread constraints place the replicas across the two Availability Zones when both are available.
 
 ## Platform Components
 
@@ -164,7 +169,7 @@ The cluster includes the following supporting components:
 
 | Component | Namespace | Purpose |
 |---|---|---|
-| NGINX Ingress Controller | ingress-nginx | Receives traffic from the AWS Network Load Balancer and routes it to services |
+| Traefik Ingress Controller | traefik | Receives traffic from the AWS Network Load Balancer and routes it to services |
 | AWS Load Balancer Controller | kube-system | Manages the AWS load balancer resources used by Kubernetes |
 | cert-manager | cert-manager | Issues and renews TLS certificates using Let's Encrypt |
 | ExternalDNS | external-dns | Updates Route 53 records based on Kubernetes resources |
@@ -172,6 +177,8 @@ The cluster includes the following supporting components:
 | Prometheus and Grafana | monitoring | Collect and display monitoring data |
 
 These components are installed using Helm charts and managed as ArgoCD Applications. Separating them from the 2048 namespace makes the cluster easier to organise and troubleshoot.
+
+Traefik runs two replicas across the Availability Zones. The cert-manager controller, webhook and CA injector also run two replicas each. The main ArgoCD server, repository server, ApplicationSet controller and application controller components are distributed across zones. Not all supporting components, including Redis, ExternalDNS and the monitoring stack, are fully replicated.
 
 ---
 
@@ -187,7 +194,7 @@ The project uses Terraform, Helm and ArgoCD for different parts of the deploymen
 
 Terraform is split into modules so networking, EKS, IAM-related resources and other AWS services can be managed separately. The state is stored remotely in S3, making it available to the infrastructure workflow.
 
-Once EKS exists, the infrastructure workflow bootstraps ArgoCD and registers the platform Applications. ArgoCD then manages the 2048 manifests and the platform Helm releases. Automated syncing and self-healing allow it to reconcile changes made in Git or unexpected changes made inside the cluster.
+Once EKS exists, the infrastructure workflow bootstraps ArgoCD and registers the platform Applications through an App-of-Apps setup. ArgoCD then manages the 2048 manifests and the platform Helm releases. Automated syncing and self-healing allow it to reconcile changes made in Git or unexpected changes made inside the cluster.
 
 The application deployment follows a similar approach. GitHub Actions builds the container, pushes it to ECR and updates the image tag in the Kubernetes manifest. ArgoCD picks up that Git change and rolls out the new image.
 
@@ -229,15 +236,11 @@ The project is designed to be repeatable and reasonably resilient without keepin
 | Two Availability Zones | Avoids putting all network and worker-node resources in one zone |
 | Two NAT Gateways | Gives each private subnet outbound access through a NAT Gateway in its own zone |
 | Private managed nodes | Keeps worker nodes away from direct internet exposure |
+| Two managed node groups | Keeps at least one worker node in each Availability Zone at the configured minimum |
 | Two application replicas | Allows the application to continue serving traffic if one Pod fails, provided a healthy replica remains |
-| Node group minimum 2, maximum 4 | Sets the allowed node count range |
+| Zone-aware scheduling | Spreads the application, Traefik and selected platform replicas across zones |
+| Node group minimum 1, maximum 2 per zone | Sets a total allowed range of 2 to 4 worker nodes |
 | Terraform destroy workflow | Removes infrastructure when it is not needed, reducing ongoing AWS costs |
-
-The node group is configured with two desired nodes. Its minimum and maximum values define capacity bounds, but those settings alone do not automatically scale the node group based on workload demand.
-
-There are also deliberate trade-offs. Two NAT Gateways and multiple VPC endpoints improve connectivity options but add cost. Prometheus metrics are stored temporarily, so they are not retained when its storage is removed. A full infrastructure destroy also removes the cluster and its attached resources, including Grafana's persistent volume through the configured cleanup process.
-
-This is a portfolio environment built to demonstrate production-style practices.
 
 ---
 

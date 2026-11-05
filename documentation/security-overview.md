@@ -4,7 +4,7 @@ Security was considered throughout the project, from the AWS network layout to c
 
 ## Network and cluster access
 
-The EKS worker nodes run in private subnets across two Availability Zones. They do not receive public IP addresses. An internet-facing Network Load Balancer exposes the application through NGINX Ingress, rather than exposing the worker nodes or application Pods directly.
+The EKS worker nodes run in private subnets across two Availability Zones. They do not receive public IP addresses. Two managed node groups maintain a worker node in each zone at the configured minimum. An internet-facing Network Load Balancer exposes the application through Traefik, rather than exposing the worker nodes or application Pods directly.
 
 Security groups define communication between the EKS control plane, worker nodes and VPC endpoints. The worker nodes use IMDSv2 through their EC2 launch template. The EKS API endpoint has both private and public access enabled, so the control plane is not private-only.
 
@@ -18,15 +18,15 @@ GitHub Actions authenticates to AWS by assuming an IAM role through OIDC. This a
 
 ## HTTPS and certificates
 
-The application uses HTTPS at [eks.humdaan.co.uk](https://eks.humdaan.co.uk). cert-manager requests and renews Let's Encrypt certificates through a Route 53 DNS-01 challenge. NGINX Ingress uses the resulting Kubernetes TLS secret to serve the application securely.
+The application uses HTTPS at [eks.humdaan.co.uk](https://eks.humdaan.co.uk). cert-manager requests and renews Let's Encrypt certificates through a Route 53 DNS-01 challenge. Traefik uses the resulting Kubernetes TLS secret to serve the application securely.
 
 ![2048 application using HTTPS](Screenshots/web-app-live.png)
 
 ## Application and container security
 
-The application runs in two Kubernetes Pods behind a ClusterIP Service. Startup, readiness and liveness probes help Kubernetes detect startup and runtime problems. CPU and memory requests and limits are also defined in the Deployment.
+The application runs in two Kubernetes Pods behind a ClusterIP Service, with topology spread constraints to distribute them across Availability Zones. Startup, readiness and liveness probes help Kubernetes detect startup and runtime problems. CPU and memory requests and limits are also defined in the Deployment.
 
-ECR stores images with immutable tags and image scanning on push. The application pipeline runs Trivy against the built image, while the Terraform workflow runs Checkov against Terraform and Kubernetes files.
+ECR stores images with immutable tags and image scanning on push. The application pipeline runs Trivy against the built image, while the Terraform workflow runs Checkov against Terraform and Kubernetes files. The workflow also runs Terraform formatting and validation, TFLint and YAML linting. GitHub Actions dependencies are pinned to commit SHAs.
 
 These scans currently provide visibility rather than strict deployment gates: Checkov uses soft-fail mode, and Trivy is configured with exit code 0. Findings should still be reviewed before treating a deployment as production-ready.
 
@@ -34,8 +34,6 @@ These scans currently provide visibility rather than strict deployment gates: Ch
 
 Grafana uses GitHub OAuth for sign-in, with anonymous access disabled. Its OAuth credentials and admin password are passed through GitHub Actions secrets and created as Kubernetes Secrets during deployment, rather than committed to Git.
 
-Grafana is exposed through an HTTPS-enabled NGINX Ingress. An optional IP allowlist appears in the Helm values, but is inactive in the form of a comment as of now. The option is available to add IP addresses to the allowlist if needed. Prometheus and Alertmanager remain internal services.
-
-## Current limitations
+Grafana is exposed through an HTTPS-enabled Traefik Ingress. An optional IP allowlist appears in the Helm values, but is inactive in the form of a comment as of now. The option is available to add IP addresses to the allowlist if needed. Prometheus and Alertmanager remain internal services.
 
 For the infrastructure layout and request path, see [System Design](system-design.md) and [Networking and User Request Flow](networking.md).

@@ -15,16 +15,20 @@ The project runs in a VPC with the address range 10.0.0.0/16 in eu-west-2. Two p
 
 Public subnets have a route to the Internet Gateway. Each private subnet uses the NAT Gateway in its own Availability Zone for outbound internet access. The worker nodes do not need public IP addresses.
 
-[![AWS infrastructure diagram](Screenshots/2048-infrastructure.png)](Screenshots/2048-infrastructure.png)
+The cluster uses two managed node groups, one for each private subnet and Availability Zone.
+
+[![AWS and Kubernetes infrastructure diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
+
+[Open the editable draw.io architecture diagram](architecture/version%203.drawio)
 
 ## How a request reaches the application
 
 1. A visitor opens https://eks.humdaan.co.uk.
 2. Cloudflare delegates the eks.humdaan.co.uk DNS zone to Route 53. ExternalDNS manages the relevant Route 53 records from Kubernetes resources.
 3. DNS resolution directs the visitor to the internet-facing AWS Network Load Balancer.
-4. The NLB forwards the connection to the NGINX Ingress Controller in EKS. The NLB uses IP targets and Proxy Protocol; TLS is handled at NGINX using the certificate provided by cert-manager.
-5. NGINX matches the hostname and forwards the request to the 2048 ClusterIP Service on port 80.
-6. The Service routes the request to one of the two 2048 application Pods, which serves the website.
+4. The NLB forwards the connection to Traefik in EKS. The NLB uses IP targets and Proxy Protocol; TLS is handled at Traefik using the certificate provided by cert-manager.
+5. Traefik matches the hostname and forwards the request to the 2048 ClusterIP Service on port 80.
+6. The Service routes the request to one of the two 2048 application Pods, which serves the website. The Pods are scheduled across the two Availability Zones.
 
 The Grafana hostname follows the same general entry path but is routed to the Grafana service rather than the 2048 application.
 
@@ -50,6 +54,6 @@ ECR and S3 are used during image retrieval, while the other endpoints support AW
 
 ## Why this approach
 
-The Network Load Balancer provides the public entry point, while NGINX handles hostname-based routing inside Kubernetes. Private worker nodes reduce direct exposure, and using two Availability Zones avoids placing the entire network path in one zone. DNS and certificates are automated so that rebuilding the cluster requires fewer manual steps.
+The Network Load Balancer provides the public entry point, while Traefik handles hostname-based routing inside Kubernetes. Private worker nodes reduce direct exposure, and using two Availability Zones avoids placing all application replicas and worker nodes in one zone. DNS and certificates are automated so that rebuilding the cluster requires fewer manual steps.
 
 For the wider infrastructure design, see [System Design](system-design.md). Security controls are covered in the [Security Overview](security-overview.md).
