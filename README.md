@@ -18,8 +18,6 @@ The application runs on Amazon EKS, with Docker images stored in ECR. I use Helm
 
 [![AWS and Kubernetes architecture diagram](documentation/architecture/version%203.drawio.png)](documentation/architecture/version%203.drawio.png)
 
-[View the editable draw.io diagram](documentation/architecture/version%203.drawio)
-
 ## Deploying changes
 
 I split the automation into two workflows: one for the infrastructure and one for the application.
