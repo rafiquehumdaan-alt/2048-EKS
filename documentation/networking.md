@@ -19,8 +19,6 @@ The cluster uses two managed node groups, one for each private subnet and Availa
 
 [![AWS and Kubernetes infrastructure diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
 
-[Open the editable draw.io architecture diagram](architecture/version%203.drawio)
-
 ## How a request reaches the application
 
 1. A visitor opens https://eks.humdaan.co.uk.
