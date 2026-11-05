@@ -8,8 +8,6 @@ The infrastructure runs in the AWS London region (eu-west-2), across two Availab
 
 [![AWS and Kubernetes Infrastructure Diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
 
-[Open the editable draw.io architecture diagram](architecture/version%203.drawio)
-
 The application is accessible at https://eks.humdaan.co.uk when the environment is running.
 
 Cloudflare delegates the application's DNS zone to Amazon Route 53. Incoming traffic reaches an AWS Network Load Balancer, which forwards requests to Traefik inside EKS. Traefik then routes traffic to the application through a Kubernetes Service.
