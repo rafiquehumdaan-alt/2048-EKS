@@ -17,7 +17,7 @@ Public subnets have a route to the Internet Gateway. Each private subnet uses th
 
 The cluster uses two managed node groups, one for each private subnet and Availability Zone.
 
-[![AWS and Kubernetes infrastructure diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
+[![AWS and Kubernetes infrastructure diagram](architecture/architecture-diagram-V3.png)](architecture/architecture-diagram-V3.png)
 
 ## How a request reaches the application
 

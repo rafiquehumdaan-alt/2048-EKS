@@ -6,7 +6,7 @@ The infrastructure runs in the AWS London region (eu-west-2), across two Availab
 
 ## AWS Infrastructure
 
-[![AWS and Kubernetes Infrastructure Diagram](architecture/version%203.drawio.png)](architecture/version%203.drawio.png)
+[![AWS and Kubernetes Infrastructure Diagram](architecture/architecture-diagram-V3.png)](architecture/architecture-diagram-V3.png)
 
 The application is accessible at https://eks.humdaan.co.uk when the environment is running.
 
